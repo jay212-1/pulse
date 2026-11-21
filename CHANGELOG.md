@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0
+
+- First stable release: the development phase is complete. From here on there are fixes and smaller
+  improvements.
+
 ## 0.7.0
 
 - Packaging (phase 8): Windows installer (`Pulse-Setup-<v>.exe`, Inno Setup, no admin rights, into

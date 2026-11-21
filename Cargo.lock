@@ -2710,7 +2710,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "pulse"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -2732,7 +2732,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-agent"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "pulse-core",
  "pulse-net",
@@ -2743,7 +2743,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-core"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2753,7 +2753,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-net"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "if-addrs",
  "mdns-sd",
@@ -2767,7 +2767,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-sim"
-version = "0.7.0"
+version = "1.0.0"
 dependencies = [
  "pulse-core",
  "pulse-net",
