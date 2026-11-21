@@ -65,6 +65,10 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   (pre-show check, sign-off, report), `app_show.rs` (show mode, light window, alert sound),
   `app_diagnose.rs` (graphs, hints, tools), `platform.rs` (open a file, alert sound), `theme.rs` (suite colours, drawn status symbols),
   `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
+- `crates/pulse-sim` – the simulator on 127.0.0.1 (library and program `pulse-sim`): consoles,
+  Art-Net node and sender, TCP services, announcements injected into Pulse's findings (never on
+  the real network), faults and scenarios. `demo.rs` is the demo venue. `tests/sim.rs` has the
+  integration tests and the ignored load measurement for `docs/netzlast.md`.
 - `install-mac.sh`, `packaging/macos/` – as in Blueprint.
 - `scripts/setup.sh` and `scripts/ui.sh` are identical copies of the files in the other suite
   apps – change all of them together.
@@ -77,6 +81,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
 PULSE_SHOTS=/some/folder cargo test -p pulse --test ui   # UI tests also write screenshots
 cargo run -p pulse-net --example watch -- 127.0.0.1 192.0.2.1
+cargo run --release -p pulse-sim -- sim.pulse   # simulated devices + their profile
+cargo test --release -p pulse-sim --test sim -- --ignored --nocapture   # load measurement
 ```
 
 - Pulse never writes to devices: probes only ask (ping, TCP connect and close, protocol queries).

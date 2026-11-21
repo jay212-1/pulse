@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0
+
+- Simulator (phase 6): `pulse-sim`, invented show devices on this computer. A desk that answers
+  its X32/M32, X Air or Wing query, an Art-Net node that answers ArtPoll, a lighting desk sending
+  a universe, TCP services, Dante, Lantern and NDI announcements. Each device can be switched
+  off, its port closed, its answers slowed or its frame rate lowered. It never announces
+  anything on the real network.
+- The demo profile now runs on the simulator. All its devices really answer, and now and then a
+  stagebox, the light desk or Show Master has a problem for a while. The IEM rack and the
+  projector still never answer.
+- `pulse-sim` as a program: runs the demo devices and writes a profile for them
+  (`pulse-sim [PROFILE] [--calm]`).
+- Console checks can use another port than the model's standard one.
+- Integration tests against the simulator. Every kind of check passes, faults turn the right
+  devices yellow or red with the right cause, and they recover. A scenario runs, and 100 devices
+  stay within the packet limit.
+- Network load measured with 100 devices: 2.9 kB/s sent, 51 packets/s, 2 % CPU. See
+  `docs/netzlast.md`.
+- The load counters count a run postponed by the packet limit once, and record how late it
+  started.
+- Discovery: a known device counts as seen when anything answers at its address or host name.
+
 ## 0.4.0
 
 - Modes (phase 5): CHECK, SHOW and DIAGNOSE in the top bar.

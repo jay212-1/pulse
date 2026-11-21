@@ -91,8 +91,10 @@ pub struct Load {
     pub timeouts: u64,
     /// Runs that crashed (their check is set up again).
     pub crashes: u64,
-    /// Runs postponed by the packet limit.
+    /// Runs postponed by the packet limit (each counted once).
     pub throttled: u64,
+    /// How late the postponed runs started, in total (ms).
+    pub delayed_ms: u64,
     pub since: Ms,
 }
 
@@ -218,6 +220,10 @@ impl Monitor {
     pub fn found<R>(&self, f: impl FnOnce(&Found) -> R) -> R {
         f(&found::lock(&self.found))
     }
+    /// The shared findings themselves (the simulator writes its announcements there).
+    pub fn found_handle(&self) -> Arc<Mutex<Found>> {
+        self.found.clone()
+    }
     /// Change what was found (the simulator and tests put devices there).
     pub fn inject(&self, f: impl FnOnce(&mut Found)) {
         f(&mut found::lock(&self.found))
@@ -286,6 +292,8 @@ struct Slot {
     /// `None` while it runs.
     probe: Option<Box<dyn Probe>>,
     next: Instant,
+    /// When the run was due, while the packet limit holds it back.
+    held: Option<Instant>,
 }
 
 struct Done {
@@ -333,6 +341,7 @@ fn new_slot(d: &Device, c: &Check, next: Instant) -> Slot {
         interface: d.interface.trim().to_string(),
         probe: Some(probe::make(d, c)),
         next,
+        held: None,
     }
 }
 
@@ -614,6 +623,7 @@ async fn run(
                 let mut packets = 0u64;
                 let mut bytes = 0u64;
                 let mut throttled = 0u64;
+                let mut delayed = Duration::ZERO;
                 for (id, slot) in slots.iter_mut() {
                     if slot.next > at || slot.probe.is_none() {
                         continue;
@@ -640,9 +650,15 @@ async fn run(
                     let cost = p.cost(&ctx);
                     if !bucket.take(cost) {
                         slot.probe = Some(p);
+                        if slot.held.is_none() {
+                            slot.held = Some(slot.next);
+                            throttled += 1;
+                        }
                         slot.next = at + Duration::from_millis(100);
-                        throttled += 1;
                         continue;
+                    }
+                    if let Some(due) = slot.held.take() {
+                        delayed += at.saturating_duration_since(due);
                     }
                     // Down checks back off (twice the interval, up to 10 s more).
                     let interval = Duration::from_secs_f64(slot.check.interval());
@@ -700,6 +716,7 @@ async fn run(
                     s.load.packets += packets;
                     s.load.bytes += bytes;
                     s.load.throttled += throttled;
+                    s.load.delayed_ms += delayed.as_millis() as u64;
                 }
                 if last_engine_tick.elapsed() >= Duration::from_secs(1) {
                     last_engine_tick = at;

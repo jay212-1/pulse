@@ -2666,7 +2666,7 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "pulse"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -2676,6 +2676,7 @@ dependencies = [
  "image",
  "pulse-core",
  "pulse-net",
+ "pulse-sim",
  "rfd",
  "serde",
  "serde_json",
@@ -2685,7 +2686,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2695,7 +2696,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-net"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "if-addrs",
  "mdns-sd",
@@ -2704,6 +2705,16 @@ dependencies = [
  "tokio",
  "tracing",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "pulse-sim"
+version = "0.5.0"
+dependencies = [
+ "pulse-core",
+ "pulse-net",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

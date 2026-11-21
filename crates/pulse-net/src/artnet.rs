@@ -33,7 +33,11 @@ pub async fn listen(
             return;
         }
     };
-    crate::found::lock(&found).artnet_state = Listener::On(now_ms());
+    {
+        let mut f = crate::found::lock(&found);
+        f.artnet_state = Listener::On(now_ms());
+        f.artnet_port = sock.local_addr().ok().map(|a| a.port());
+    }
     let mut buf = vec![0u8; 1500];
     let mut every = tokio::time::interval(POLL_EVERY);
     every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

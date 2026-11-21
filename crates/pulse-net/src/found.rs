@@ -67,6 +67,8 @@ pub struct Sweep {
 pub struct Found {
     pub artnet: Seen,
     pub artnet_state: Listener,
+    /// The UDP port the Art-Net listener is bound to.
+    pub artnet_port: Option<u16>,
     /// Full name -> service.
     pub mdns: BTreeMap<String, Service>,
     pub mdns_state: Listener,

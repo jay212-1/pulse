@@ -72,9 +72,10 @@ pub fn make(device: &Device, check: &Check) -> Box<dyn Probe> {
             port: *port,
             thresholds: check.thresholds,
         }),
-        CheckKind::Console { model } => Box::new(ConsoleProbe {
+        CheckKind::Console { model, port } => Box::new(ConsoleProbe {
             target,
             model: *model,
+            port: port.unwrap_or_else(|| model.port()),
         }),
         CheckKind::ArtNetNode => Box::new(ArtNetNodeProbe { target }),
         CheckKind::ArtNetUniverse { universe, min_fps } => Box::new(UniverseProbe {
@@ -390,6 +391,7 @@ fn seconds(ms: u64) -> String {
 struct ConsoleProbe {
     target: Target,
     model: ConsoleModel,
+    port: u16,
 }
 
 impl Probe for ConsoleProbe {
@@ -399,7 +401,7 @@ impl Probe for ConsoleProbe {
 
     fn run<'a>(&'a mut self, ctx: &'a Ctx) -> BoxFut<'a, ProbeResult> {
         Box::pin(async move {
-            let port = self.model.port();
+            let port = self.port;
             let via = format!("UDP {port}");
             let ip = match ipv4(&mut self.target, ctx, Depth::Answers, &via).await {
                 Ok(ip) => ip,

@@ -245,6 +245,7 @@ fn a_console_answers_and_discovery_finds_it() {
         "127.0.0.1",
         CheckKind::Console {
             model: ConsoleModel::XAir,
+            port: None,
         },
     );
     let wing = fast(
@@ -253,6 +254,7 @@ fn a_console_answers_and_discovery_finds_it() {
         "127.0.0.1",
         CheckKind::Console {
             model: ConsoleModel::Wing,
+            port: None,
         },
     );
     let opts = Options {

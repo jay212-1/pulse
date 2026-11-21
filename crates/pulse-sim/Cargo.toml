@@ -1,0 +1,17 @@
+[package]
+name = "pulse-sim"
+description = "Pulse simulator: invented show devices on this computer, for the demo and the tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+pulse-core.workspace = true
+pulse-net.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

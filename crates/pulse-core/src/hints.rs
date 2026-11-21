@@ -76,7 +76,7 @@ pub fn hints(d: &Device, last: &[Option<&ProbeResult>], nets: &[Net]) -> Vec<Str
                     say("Slow answers on a wired network usually mean an overloaded switch or a busy device.".into());
                 }
             }
-            CheckKind::Console { model } if failed(r) && ping_ok => say(format!(
+            CheckKind::Console { model, .. } if failed(r) && ping_ok => say(format!(
                 "The desk answers ping but not the {} query: is it that model? Network remote control may be off on the desk.",
                 model.label()
             )),

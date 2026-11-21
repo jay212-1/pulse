@@ -213,7 +213,7 @@ impl App {
                 w,
                 Icon::Demo,
                 "Try the demo",
-                "An invented venue: devices on this computer, two that never answer.",
+                "An invented venue with simulated devices; now and then something goes wrong.",
                 false,
             )
             .clicked()

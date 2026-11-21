@@ -185,13 +185,19 @@ mod tests {
         let port = l.local_addr().unwrap().port();
         assert!(port_test("127.0.0.1", port, Duration::from_secs(1))
             .starts_with(&format!("Port {port} is open")));
-        let closed = std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
-        let s = port_test("127.0.0.1", closed, Duration::from_secs(1));
-        assert!(s.contains("is closed"), "{s}");
+        // A freed port; a test running in parallel may grab it in between, so
+        // a few tries with fresh ones.
+        let mut last = String::new();
+        let closed = (0..5).any(|_| {
+            let p = std::net::TcpListener::bind("127.0.0.1:0")
+                .unwrap()
+                .local_addr()
+                .unwrap()
+                .port();
+            last = port_test("127.0.0.1", p, Duration::from_secs(1));
+            last.contains("is closed")
+        });
+        assert!(closed, "{last}");
     }
 
     #[test]

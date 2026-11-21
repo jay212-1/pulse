@@ -112,7 +112,12 @@ pub enum CheckKind {
     /// Can a TCP connection to the port be opened (and is closed again at once)?
     Tcp { port: u16 },
     /// Ask a mixing console who it is (OSC `/xinfo`, Wing discovery).
-    Console { model: ConsoleModel },
+    /// `port`: another UDP port than the model's (simulator, port forwarding).
+    Console {
+        model: ConsoleModel,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+    },
     /// The device answers ArtPoll with an ArtPollReply.
     ArtNetNode,
     /// DMX frames of a universe arrive, at least `min_fps` per second.
@@ -132,7 +137,7 @@ impl CheckKind {
         match self {
             CheckKind::Ping => "Ping".into(),
             CheckKind::Tcp { port } => format!("TCP {port}"),
-            CheckKind::Console { model } => format!("{} query", model.label()),
+            CheckKind::Console { model, .. } => format!("{} query", model.label()),
             CheckKind::ArtNetNode => "Art-Net node".into(),
             CheckKind::ArtNetUniverse { universe, .. } => format!("Universe {universe}"),
             CheckKind::Mdns { service, .. } => format!("mDNS {}", service_short(service)),
@@ -173,6 +178,7 @@ impl CheckKind {
             CheckKind::Tcp { port: 80 },
             CheckKind::Console {
                 model: ConsoleModel::X32,
+                port: None,
             },
             CheckKind::ArtNetNode,
             CheckKind::ArtNetUniverse {

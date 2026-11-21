@@ -217,7 +217,17 @@ pub fn report(p: &Profile, sightings: &[Sighting], swept: Option<Net>) -> Report
         }
     }
     for d in p.devices.iter().filter(|d| d.enabled) {
-        if out.known.iter().any(|c| c.device == Some(d.id)) {
+        // Seen if anything was seen at its address (several devices may share one).
+        let seen = out.known.iter().chain(out.new.iter()).any(|c| {
+            c.device == Some(d.id)
+                || d.address.trim().parse::<Ipv4Addr>().ok() == Some(c.address)
+                || (!c.host.is_empty()
+                    && d.address
+                        .trim()
+                        .trim_end_matches('.')
+                        .eq_ignore_ascii_case(&c.host))
+        });
+        if seen {
             continue;
         }
         let expected: Vec<&str> = d

@@ -7,7 +7,7 @@
 | 3 UI-Grundgerüst | fertig (2026-11-21, 0.2.0): Startseite, Monitor mit Ampel/Begründung/Kacheln, Detailpanel, Inventar-Editor, Event-Log mit CSV, Icon, `install-mac.sh`. 5 UI-Tests mit Screenshots (`PULSE_SHOTS`). Launcher-Kachel vorbereitet |
 | 4 Protokoll-Checks | fertig (2026-11-21, 0.3.0): Art-Net (Nodes, Universen mit fps/Konflikten), OSC-Konsolenabfrage (X32/M32, X Air, Wing), mDNS/Dante/NDI, Interfaces und Interface-Bindung, Presets, Auto-Discovery mit Ping-Sweep. Tests: 41 Kern, 13 Netz (davon 5 gegen Fake-Geräte), 7 UI |
 | 5 Modi | fertig (2026-11-21, 0.4.0): CHECK/SHOW/DIAGNOSE, Pre-Show-Check mit Freigabe und HTML/CSV-Bericht, Show-Modus (ruhig, Blinken, Ton optional), Ampelfenster, Diagnose mit Graphen, Hinweisen, Port-Test und Traceroute. Tests: 44 Kern, 21 Netz, 10 UI |
-| 6 Simulator | offen |
+| 6 Simulator | fertig (2026-11-21, 0.5.0): `pulse-sim` als Bibliothek und Programm, Demo läuft auf dem Simulator mit Szenario, 4 Integrationstests gegen den Simulator, Netzlast mit 100 Geräten gemessen (`netzlast.md`: 2,9 kB/s, Limit greift ab etwa 85 Geräten). Tests: 44 Kern, 21 Netz, 4 Simulator, 10 UI |
 | 7 Erweiterungen | offen |
 | 8 Build/Release | offen |
 
@@ -32,3 +32,8 @@
 
 - Das Ampelfenster ist nur eingebettet (im Test) geprüft; als echtes zweites Fenster bitte einmal von Hand ansehen.
 - Der Ton ist nicht automatisch testbar (Systemtöne); bitte im Show-Modus einmal einschalten und ein Gerät abziehen.
+
+## Offen aus Phase 6
+
+- Das Programm `pulse-sim` mit der App zusammen einmal von Hand ausprobieren (Profil öffnen, Lichtpult und Node sollten grün werden).
+- Die Messung lief auf Loopback. Im echten Netz bleibt die Paketzahl gleich; Antwortzeiten und Verluste kommen dazu.

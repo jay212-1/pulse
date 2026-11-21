@@ -27,6 +27,7 @@ fn harness() -> Harness<'static, App> {
     let mut app = App::new(&egui::Context::default(), None);
     app.dialogs = false;
     app.lan = false;
+    app.demo_events = false;
     // New profiles go to a folder of their own (never the real Documents).
     app.start.location = tempfile::tempdir().unwrap().keep();
     let mut b = Harness::builder().with_size(egui::vec2(1400.0, 860.0));
@@ -228,7 +229,11 @@ fn inventory_bulk_changes_and_delete_with_confirmation() {
     h.get_by_label("TCP port").click();
     settle(&mut h);
     let d = h.state().profile().unwrap().devices[0].clone();
-    assert_eq!(d.checks.len(), 2);
+    assert_eq!(
+        d.checks.len(),
+        3,
+        "ping, console query and the new TCP port"
+    );
     h.get_by_label("Delete…").click();
     settle(&mut h);
     h.get_by_label("Delete").click();
@@ -279,7 +284,8 @@ fn presets_bring_their_checks_and_new_check_kinds_can_be_edited() {
     assert_eq!(
         d.checks[1].kind,
         pulse_core::CheckKind::Console {
-            model: pulse_core::ConsoleModel::X32
+            model: pulse_core::ConsoleModel::X32,
+            port: None
         }
     );
     h.get_by_label("Console query");

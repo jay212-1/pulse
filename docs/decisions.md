@@ -36,3 +36,8 @@
 - 2026-11-21: Ampelfenster als eigener egui-Viewport (`show_viewport_immediate`), F/F11 schaltet Vollbild. In Tests wird es eingebettet angezeigt.
 - 2026-11-21: Traceroute über das Systemwerkzeug (`traceroute`/`tracepath`, unter Windows `tracert`), weil ein eigenes Traceroute ohne Admin-Rechte nicht überall geht. Die Adresse wird vorher geprüft (nur Buchstaben, Ziffern, `.-:_`), es gibt keine Shell.
 - 2026-11-21: Hinweise in der Diagnose sind feste Faustregeln in `pulse-core/src/hints.rs` (testbar), keine Heuristik über die Zeit.
+- 2026-11-21: Simulator `pulse-sim` läuft auf 127.0.0.1. Ankündigungen (Dante, Lantern, NDI) schreibt er direkt in die Funde von Pulse (`Sim::attach`), er kündigt nie etwas im echten Netz an. Das Programm `pulse-sim` lässt diese Prüfungen deshalb im Profil weg.
+- 2026-11-21: Pro Gerät lässt sich nur der Dienst stören (aus, Port zu, langsam, fps), nicht der Ping. macOS hat nur 127.0.0.1, Ping-Ausfälle zeigen in der Demo weiter die TEST-NET-Adressen.
+- 2026-11-21: Konsolen-Prüfung mit optionalem Port (`port`, Standard: der Port des Modells), damit Simulator und Pulte hinter NAT gehen.
+- 2026-11-21: Demo-Szenario alle 3 Minuten: Stagebox SR fehlt 40–65 s, Lichtpult nur 8 fps 85–105 s, Show Master zu 125–150 s. In Tests aus (`App.demo_events`).
+- 2026-11-21: Vom Paketlimit verschobene Läufe zählen einmal (nicht jeder 100-ms-Wiederholversuch). Dazu wird die Verspätung gezählt. Grundlage für `docs/netzlast.md`.

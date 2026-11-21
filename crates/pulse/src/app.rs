@@ -134,6 +134,10 @@ pub struct App {
     pub ack_note: String,
     /// File dialogs (off in tests).
     pub dialogs: bool,
+    /// The demo's simulated devices.
+    sim: Option<pulse_sim::Sim>,
+    /// The demo's scenario (something goes wrong now and then; off in tests).
+    pub demo_events: bool,
     /// Discovery on this computer's networks (mDNS, broadcasts; off in tests).
     pub lan: bool,
     /// A short message in the status bar: text, colour, when.
@@ -165,6 +169,8 @@ impl App {
             ack_note: String::new(),
             dialogs: true,
             lan: true,
+            sim: None,
+            demo_events: true,
             notice: None,
             ctx: ctx.clone(),
         };
@@ -179,6 +185,7 @@ impl App {
     /// Watch `profile` (stops the previous monitor).
     pub fn start_document(&mut self, profile: Profile, path: Option<PathBuf>) {
         self.monitor = None;
+        self.sim = None;
         self.discovering = false;
         self.mode = Mode::Check;
         self.preshow = PreShowState::default();
@@ -213,8 +220,25 @@ impl App {
         self.inventory = InventoryState::default();
     }
 
+    /// The demo venue on the simulator (without it: the plain demo profile).
     pub fn open_demo(&mut self) {
-        self.start_document(pulse_core::demo::profile(), None);
+        match pulse_sim::demo::start() {
+            Ok((profile, sim)) => {
+                self.start_document(profile, None);
+                if let Some(m) = &self.monitor {
+                    sim.attach(m.found_handle());
+                }
+                if self.demo_events {
+                    let (steps, period) = pulse_sim::demo::scenario();
+                    sim.scenario(steps, period);
+                }
+                self.sim = Some(sim);
+            }
+            Err(e) => {
+                self.start_document(pulse_core::demo::profile(), None);
+                self.say(format!("Simulator not available: {e}"), theme::WARN);
+            }
+        }
     }
 
     /// Open a profile (`None`: ask for one).
@@ -322,6 +346,7 @@ impl App {
             self.save_to(None);
         }
         self.monitor = None;
+        self.sim = None;
         self.doc = None;
     }
 

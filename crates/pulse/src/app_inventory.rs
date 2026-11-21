@@ -584,7 +584,7 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check, nics: &[Nic]) -> bool {
                     CheckKind::Tcp { port } => {
                         ui.add(egui::DragValue::new(port).range(1..=65535));
                     }
-                    CheckKind::Console { model } => {
+                    CheckKind::Console { model, .. } => {
                         egui::ComboBox::from_id_salt(("console", c.id))
                             .selected_text(model.label())
                             .show_ui(ui, |ui| {

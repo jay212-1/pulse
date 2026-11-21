@@ -120,12 +120,15 @@ impl Preset {
         match self {
             Preset::X32 => vec![CheckKind::Console {
                 model: ConsoleModel::X32,
+                port: None,
             }],
             Preset::XAir => vec![CheckKind::Console {
                 model: ConsoleModel::XAir,
+                port: None,
             }],
             Preset::Wing => vec![CheckKind::Console {
                 model: ConsoleModel::Wing,
+                port: None,
             }],
             Preset::DanteDevice => vec![CheckKind::Mdns {
                 service: DANTE_SERVICE.into(),
@@ -195,7 +198,8 @@ mod tests {
         assert_eq!(
             d.checks[1].kind,
             CheckKind::Console {
-                model: ConsoleModel::X32
+                model: ConsoleModel::X32,
+                port: None
             }
         );
         let o = p.add_preset(Preset::OtherConsole, "Old desk", "10.0.0.2");
