@@ -4,7 +4,13 @@ Netzwerk- und Gerätemonitor der Showtime Suite. Pulse prüft vor und während e
 
 Pulse schreibt nie auf Geräte. Es fragt nur, schonend und mit Timeouts.
 
-In Arbeit (Phase 2 von 8, siehe `docs/PLAN.md` und `docs/FORTSCHRITT.md`).
+In Arbeit (Phase 3 von 8, siehe `docs/PLAN.md` und `docs/FORTSCHRITT.md`).
+
+## Installieren (Mac)
+
+```bash
+bash install-mac.sh
+```
 
 ## Entwickeln
 

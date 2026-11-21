@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.0
+
+- The window (phase 3), in the suite's look: a start screen with new profile, open, recent
+  profiles and a demo venue; Save, Save as / export, profiles saved shortly after each change.
+- Monitor page: the overall light with symbol and word, the reasons ("IEM rack: not reachable
+  since 15:54:35"), the counts and the acknowledged problems; a tile per device grouped by area
+  (or problems first, or by name) with status, address, latency and "seen … ago"; search,
+  "problems only", areas in the navigation with their own lights. Colour is never the only sign:
+  every status has its own drawn symbol and word.
+- Detail panel: status, cause and since when, acknowledge with a note, check now, every check
+  with what it proves (check depth), how it was measured, values and raw data, latest events.
+- Inventory: all devices in a list, several selected for bulk changes (area, criticality, on/off,
+  Wi-Fi or wired thresholds), duplicate, delete with confirmation; a form per device with its
+  checks (ping, TCP port; interval, timeout, thresholds, critical) and its debounce.
+- Event log: newest first, search, filter by status and area, CSV export.
+- Status bar with the ping method, the counts and the network load Pulse causes.
+- App icon (a teal pulse), `install-mac.sh` and the DMG build, so Pulse can be installed on a Mac.
+
 ## 0.1.0
 
 - The core of Pulse (phase 2): inventory with devices, checks, thresholds and hysteresis per

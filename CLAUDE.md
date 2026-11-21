@@ -52,6 +52,12 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   `unsafe` code –, TCP fallback), `probe.rs` (the `Probe` trait and the probes), `monitor.rs`
   (scheduler on its own tokio runtime: spread-out intervals, packet limit, hard timeout per run,
   shared snapshot for the window). `examples/watch.rs` watches addresses from the terminal.
+- `crates/pulse` – the egui app: `app.rs` (window, profile file, pages, navigation, status bar),
+  `app_start.rs` (start screen, new-profile form, backdrop), `app_monitor.rs` (overall light,
+  tiles), `app_detail.rs` (detail panel), `app_inventory.rs` (inventory editor),
+  `app_log.rs` (event log, CSV), `theme.rs` (suite colours, drawn status symbols),
+  `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
+- `install-mac.sh`, `packaging/macos/` – as in Blueprint.
 - `scripts/setup.sh` and `scripts/ui.sh` are identical copies of the files in the other suite
   apps – change all of them together.
 
@@ -61,6 +67,7 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check
+PULSE_SHOTS=/some/folder cargo test -p pulse --test ui   # UI tests also write screenshots
 cargo run -p pulse-net --example watch -- 127.0.0.1 192.0.2.1
 ```
 

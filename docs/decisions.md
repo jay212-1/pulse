@@ -14,3 +14,9 @@
 - 2026-11-21: Das erste Grün nach dem Start wird nicht ins Log geschrieben (sonst 100 Zeilen „Unknown -> OK“ beim Start).
 - 2026-11-21: Schonend: Prüfungen über ihr Intervall verteilt (fester Versatz pro Id), global standardmäßig höchstens 50 Pakete/s, rote Prüfungen mit verdoppeltem Intervall (+ höchstens 10 s), harter Timeout um jeden Lauf.
 - 2026-11-21: Formatierung mit `cargo fmt` (Standard, wie Show Master), `cargo fmt --check` gehört zur Prüfung.
+- 2026-11-21: Profile sind einzelne `.pulse`-Dateien (kein eigener Ordner wie bei Blueprint), standardmäßig in `Documents/Pulse`. Änderungen werden 0,8 s nach der letzten Eingabe gespeichert, ohne Undo. Löschen fragt deshalb nach.
+- 2026-11-21: Demo-Profil „Riverside Hall“ (erfunden) mit Geräten auf 127.0.0.1 und zwei TEST-NET-Adressen (192.0.2.x), die nie antworten. Der Simulator in Phase 6 ersetzt die Adressen.
+- 2026-11-21: Status-Symbole werden gezeichnet: Haken im Kreis (OK), Dreieck mit Ausrufezeichen (Warnung), Kreuz im Quadrat (Down), Strich im Ring (unbekannt). Dazu steht immer das Wort.
+- 2026-11-21: Ampel-Gelb ist die Suite-Farbe `WARN` aus Blueprint (`#facc15`), nicht das Amber aus Show Master: Es soll als „Gelb“ lesbar sein.
+- 2026-11-21: Das Icon wurde aus `assets/icon.svg` mit resvg gerendert (PNG 1024, ICO), weil Playwright auf diesem Mac fehlt. Das Ergebnis entspricht `render-icon.mjs`.
+- 2026-11-21: `install-mac.sh` und `build-dmg.sh` kommen schon in Phase 3, damit Pulse aus dem Launcher installiert werden kann. Der Rest der Skripte folgt in Phase 8.

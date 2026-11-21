@@ -1,0 +1,30 @@
+[package]
+name = "pulse"
+description = "Pulse: network and device monitor of the Showtime Suite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+pulse-core.workspace = true
+pulse-net.workspace = true
+eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland", "accesskit"] }
+egui = "0.37"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = "0.15"
+dirs = "6"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+egui_kittest = { version = "0.37", features = ["eframe", "wgpu"] }
+tempfile = "3"
+
+[build-dependencies]
+winresource = "0.1"
+
+[lints]
+workspace = true
