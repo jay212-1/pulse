@@ -13,6 +13,8 @@ pub const MAX_RECENT: usize = 10;
 pub struct Settings {
     pub recent: Vec<PathBuf>,
     pub last_dir: Option<PathBuf>,
+    /// Alert sound in show mode (off by default).
+    pub sound: bool,
 }
 
 /// The settings folder.

@@ -13,6 +13,7 @@ pub mod artnet;
 pub mod demo;
 pub mod discovery;
 pub mod events;
+pub mod hints;
 pub mod history;
 pub mod model;
 pub mod osc;
@@ -20,6 +21,7 @@ pub mod ping;
 pub mod presets;
 pub mod probe;
 pub mod profile;
+pub mod report;
 pub mod status;
 
 pub use events::{Event, EventKind, EventLog};

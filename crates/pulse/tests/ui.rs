@@ -349,3 +349,129 @@ fn discovery_lists_new_known_and_missing_devices_and_adds_with_one_click() {
     // once its answer is older than a minute.
     h.get_by_label_contains("EXPECTED, NOT SEEN");
 }
+
+#[test]
+fn pre_show_check_signs_off_and_writes_the_report() {
+    let mut h = harness();
+    let reports = tempfile::tempdir().unwrap().keep();
+    h.state_mut().report_dir = Some(reports.clone());
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    wait(&mut h, "the dead devices down", 20, |a| {
+        device_status(a, "IEM rack") == Status::Down
+            && device_status(a, "Projector") == Status::Down
+    });
+    h.get_by_label("Pre-show check").click();
+    settle(&mut h);
+    assert_eq!(h.state().page, Page::PreShow);
+    h.get_by_label("Start pre-show check").click();
+    settle(&mut h);
+    wait(&mut h, "every check ran", 30, |a| {
+        a.preshow.finished.is_some()
+    });
+    h.get_by_label("Pre-show check  (done)");
+    h.get_by_label("Your name").click();
+    h.get_by_label("Your name").type_text("Test Person");
+    settle(&mut h);
+    // Two open problems: one acknowledged as known, the other released open.
+    h.get_by_label("Known: IEM rack").click();
+    wait(&mut h, "acknowledged", 3, |a| {
+        a.overview().is_some_and(|o| o.acked.len() == 1)
+    });
+    h.get_by_label("Release with 1 open problem (listed in the report)")
+        .click();
+    settle(&mut h);
+    shot(&mut h, "preshow");
+    h.get_by_label("Technology released").click();
+    settle(&mut h);
+    let s = h.state().preshow.signed.clone().unwrap();
+    assert_eq!(s.by, "Test Person");
+    assert!(s.error.is_none(), "{:?}", s.error);
+    let html = std::fs::read_to_string(s.html.unwrap()).unwrap();
+    assert!(html.contains("Technology released by <b>Test Person</b>"));
+    assert!(html.contains("Released with 2 known problems"), "{html}");
+    assert!(html.contains("Acknowledged as known: known at the pre-show check"));
+    let csv = std::fs::read_to_string(s.csv.unwrap()).unwrap();
+    assert!(csv.lines().count() >= 14);
+    assert!(s.at > 0);
+    h.get_by_label_contains("Report: ");
+    assert!(h.state().preshow.started.is_none());
+    shot(&mut h, "preshow-signed");
+}
+
+#[test]
+fn show_mode_is_calm_and_the_light_window_opens() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    wait(&mut h, "the IEM rack down", 15, |a| {
+        device_status(a, "IEM rack") == Status::Down
+    });
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "SHOW")
+        .click();
+    settle(&mut h);
+    assert_eq!(h.state().mode, pulse::Mode::Show);
+    h.get_by_label("Show: Warning");
+    h.get_by_label("Problem IEM rack: Down");
+    // OK devices are not shown one by one, and there is no navigation.
+    assert!(h.query_by_label("Device FOH desk: OK").is_none());
+    assert!(h.query_by_label("Inventory  (13)").is_none());
+    h.get_by_label("Sound on new problems");
+    assert!(!h.state().settings.sound, "the sound is off by default");
+    shot(&mut h, "show");
+    h.get_by_label("Light window").click();
+    settle(&mut h);
+    h.get_by_label("Light window: Warning");
+    shot(&mut h, "light-window");
+    // In tests the window is embedded over the main one; closing it there:
+    h.state_mut().show.light_window = false;
+    settle(&mut h);
+    assert!(h.query_by_label("Light window: Warning").is_none());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "CHECK")
+        .click();
+    settle(&mut h);
+    h.get_by_label("Inventory  (13)");
+}
+
+#[test]
+fn diagnose_shows_graphs_hints_and_tests_a_port() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    wait(&mut h, "the IEM rack down", 15, |a| {
+        device_status(a, "IEM rack") == Status::Down
+    });
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "DIAGNOSE")
+        .click();
+    settle(&mut h);
+    // Problems first: the IEM rack (TEST-NET, outside this computer's networks).
+    h.get_by_label_contains("No answer at all");
+    h.get_by_label("FOH desk").click();
+    settle(&mut h);
+    wait(&mut h, "a few results", 10, |a| {
+        a.monitor.as_ref().unwrap().with(|s| {
+            let d = s
+                .profile
+                .devices
+                .iter()
+                .find(|d| d.name == "FOH desk")
+                .unwrap();
+            s.history
+                .series(d.checks[0].id, pulse_core::Metric::LatencyMs)
+                .is_some_and(|x| x.len() >= 3)
+        })
+    });
+    h.get_by_label_contains("Graph Latency: ");
+    h.get_by_label_contains("Graph Loss: ");
+    assert!(h.query_by_label("Graph Latency: no data").is_none());
+    shot(&mut h, "diagnose");
+    h.get_by_label("Test port").click();
+    wait(&mut h, "the port test", 5, |a| {
+        a.diagnose
+            .port_result
+            .as_ref()
+            .and_then(|(_, r)| r.lock().unwrap().clone())
+            .is_some()
+    });
+    h.get_by_label_contains("Port 80");
+}

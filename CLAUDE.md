@@ -48,7 +48,8 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   (status engine: hysteresis, flapping, acknowledgements, area and overall lights, reasons),
   `events.rs` (event log, filter, CSV), `history.rs` (series for the graphs), `artnet.rs`
   (ArtPoll/ArtPollReply/ArtDmx, frames per universe), `osc.rs` (minimal OSC codec),
-  `presets.rs` (device presets), `discovery.rs` (sightings -> new / known / missing devices).
+  `presets.rs` (device presets), `discovery.rs` (sightings -> new / known / missing devices),
+  `report.rs` (pre-show report, HTML and CSV), `hints.rs` (plain-language diagnosis hints).
 - `crates/pulse-net` – the network side, read-only: `icmp.rs` (ping without admin rights:
   ICMP datagram sockets on macOS/Linux, `icmp_windows.rs` with `IcmpSendEcho` – the only
   `unsafe` code –, TCP fallback), `probe.rs` (the `Probe` trait and the probes), `monitor.rs`
@@ -56,11 +57,13 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   shared snapshot for the window, starts the listeners only when needed), `found.rs` (what the
   listeners found), `artnet.rs` (listener on UDP 6454), `mdns.rs` (mDNS registry, `mdns-sd`),
   `console.rs` (X32/X Air/Wing queries), `interfaces.rs`, `udp.rs`, `discovery.rs` (console
-  broadcast, ping sweep). `examples/watch.rs` watches addresses from the terminal.
+  broadcast, ping sweep), `tools.rs` (port test, traceroute via the system tool). `examples/watch.rs` watches addresses from the terminal.
 - `crates/pulse` – the egui app: `app.rs` (window, profile file, pages, navigation, status bar),
   `app_start.rs` (start screen, new-profile form, backdrop), `app_monitor.rs` (overall light,
   tiles), `app_detail.rs` (detail panel), `app_inventory.rs` (inventory editor),
-  `app_log.rs` (event log, CSV), `app_discovery.rs` (auto discovery), `theme.rs` (suite colours, drawn status symbols),
+  `app_log.rs` (event log, CSV), `app_discovery.rs` (auto discovery), `app_preshow.rs`
+  (pre-show check, sign-off, report), `app_show.rs` (show mode, light window, alert sound),
+  `app_diagnose.rs` (graphs, hints, tools), `platform.rs` (open a file, alert sound), `theme.rs` (suite colours, drawn status symbols),
   `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
 - `install-mac.sh`, `packaging/macos/` – as in Blueprint.
 - `scripts/setup.sh` and `scripts/ui.sh` are identical copies of the files in the other suite

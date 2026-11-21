@@ -160,7 +160,7 @@ impl EventLog {
     }
 }
 
-fn csv_field(s: &str) -> String {
+pub fn csv_field(s: &str) -> String {
     // A leading = + - @ would run as a formula in a spreadsheet.
     let s = if s.starts_with(['=', '+', '-', '@']) {
         format!("'{s}")

@@ -4,15 +4,19 @@
 
 pub mod app;
 mod app_detail;
+pub mod app_diagnose;
 pub mod app_discovery;
 pub mod app_inventory;
 mod app_log;
 pub mod app_monitor;
+pub mod app_preshow;
+pub mod app_show;
 pub mod app_start;
+mod platform;
 pub mod settings;
 pub mod theme;
 
-pub use app::{App, Page, Sort};
+pub use app::{App, Mode, Page, Sort};
 
 use std::path::PathBuf;
 

@@ -1,8 +1,11 @@
 //! The window: the open profile, its monitor, the pages (monitor,
 //! inventory, event log), the File menu, the navigation and the status bar.
 
+use crate::app_diagnose::DiagnoseState;
 use crate::app_discovery::DiscoveryState;
 use crate::app_inventory::InventoryState;
+use crate::app_preshow::PreShowState;
+use crate::app_show::ShowState;
 use crate::app_start::StartState;
 use crate::settings::Settings;
 use crate::theme;
@@ -22,9 +25,37 @@ const SAVE_AFTER: Duration = Duration::from_millis(800);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     Monitor,
+    PreShow,
     Inventory,
     Discovery,
     Log,
+}
+
+/// CHECK (set up and check), SHOW (calm, during the show), DIAGNOSE (graphs and tools).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Mode {
+    #[default]
+    Check,
+    Show,
+    Diagnose,
+}
+
+impl Mode {
+    pub const ALL: [Mode; 3] = [Mode::Check, Mode::Show, Mode::Diagnose];
+    pub fn label(self) -> &'static str {
+        match self {
+            Mode::Check => "CHECK",
+            Mode::Show => "SHOW",
+            Mode::Diagnose => "DIAGNOSE",
+        }
+    }
+    pub fn hint(self) -> &'static str {
+        match self {
+            Mode::Check => "Set up and check: monitor, pre-show check, inventory, discovery, log",
+            Mode::Show => "During the show: calm, only problems large, no dialogs",
+            Mode::Diagnose => "One device in depth: graphs, raw data, hints, port test, traceroute",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -82,6 +113,7 @@ pub struct App {
     pub doc: Option<Doc>,
     pub monitor: Option<Monitor>,
     pub page: Page,
+    pub mode: Mode,
     /// Device in the detail panel.
     pub selected: Option<Id>,
     pub tiles: TileFilter,
@@ -89,6 +121,11 @@ pub struct App {
     pub start: StartState,
     pub inventory: InventoryState,
     pub discovery: DiscoveryState,
+    pub preshow: PreShowState,
+    pub show: ShowState,
+    pub diagnose: DiagnoseState,
+    /// Reports go here (default: next to the profile, in "Reports").
+    pub report_dir: Option<PathBuf>,
     /// The monitor was told the discovery page is open.
     discovering: bool,
     /// This computer's interfaces (refreshed now and then).
@@ -112,12 +149,17 @@ impl App {
             doc: None,
             monitor: None,
             page: Page::Monitor,
+            mode: Mode::Check,
             selected: None,
             tiles: TileFilter::default(),
             log_filter: Filter::default(),
             start: StartState::default(),
             inventory: InventoryState::default(),
             discovery: DiscoveryState::default(),
+            preshow: PreShowState::default(),
+            show: ShowState::default(),
+            diagnose: DiagnoseState::default(),
+            report_dir: None,
             discovering: false,
             nics: (Vec::new(), None),
             ack_note: String::new(),
@@ -138,6 +180,9 @@ impl App {
     pub fn start_document(&mut self, profile: Profile, path: Option<PathBuf>) {
         self.monitor = None;
         self.discovering = false;
+        self.mode = Mode::Check;
+        self.preshow = PreShowState::default();
+        self.show = ShowState::default();
         let ctx = self.ctx.clone();
         let mut opts = Options {
             on_change: Some(Arc::new(move || ctx.request_repaint())),
@@ -366,8 +411,10 @@ impl App {
         {
             ctx.request_repaint_after(SAVE_AFTER);
         }
+        self.show_alerts();
+        self.light_window(ctx);
         // The monitor listens to everything while the discovery page is open.
-        let want = self.page == Page::Discovery && self.doc.is_some();
+        let want = self.mode == Mode::Check && self.page == Page::Discovery && self.doc.is_some();
         if want != self.discovering {
             if let Some(m) = &self.monitor {
                 m.set_discovery(want);
@@ -405,16 +452,23 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(12, 5)),
             )
             .show(ui, |ui| self.status_bar(ui));
-        egui::Panel::left("nav")
-            .resizable(false)
-            .exact_size(200.0)
-            .frame(
-                egui::Frame::NONE
-                    .fill(theme::PANEL)
-                    .inner_margin(egui::Margin::symmetric(10, 12)),
-            )
-            .show(ui, |ui| self.nav(ui));
-        if self.page == Page::Monitor
+        if self.mode == Mode::Check {
+            egui::Panel::left("nav")
+                .resizable(false)
+                .exact_size(200.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(theme::PANEL)
+                        .inner_margin(egui::Margin::symmetric(10, 12)),
+                )
+                .show(ui, |ui| self.nav(ui));
+        }
+        let detail_here = match self.mode {
+            Mode::Check => self.page == Page::Monitor,
+            Mode::Show => true,
+            Mode::Diagnose => false,
+        };
+        if detail_here
             && self
                 .selected
                 .is_some_and(|id| self.profile().is_some_and(|p| p.device(id).is_some()))
@@ -439,11 +493,14 @@ impl App {
                     .fill(theme::BG)
                     .inner_margin(egui::Margin::symmetric(18, 14)),
             )
-            .show(ui, |ui| match self.page {
-                Page::Monitor => self.monitor_page(ui),
-                Page::Inventory => self.inventory_page(ui),
-                Page::Discovery => self.discovery_page(ui),
-                Page::Log => self.log_page(ui),
+            .show(ui, |ui| match (self.mode, self.page) {
+                (Mode::Show, _) => self.show_page(ui),
+                (Mode::Diagnose, _) => self.diagnose_page(ui),
+                (Mode::Check, Page::Monitor) => self.monitor_page(ui),
+                (Mode::Check, Page::PreShow) => self.preshow_page(ui),
+                (Mode::Check, Page::Inventory) => self.inventory_page(ui),
+                (Mode::Check, Page::Discovery) => self.discovery_page(ui),
+                (Mode::Check, Page::Log) => self.log_page(ui),
             });
     }
 
@@ -456,6 +513,29 @@ impl App {
             ui.label(RichText::new(doc.title()).strong().size(15.0));
             if doc.path.is_none() {
                 ui.label(RichText::new("not saved").small().color(theme::MUTED));
+            }
+            ui.add_space(16.0);
+            for m in Mode::ALL {
+                let on = self.mode == m;
+                let b = egui::Button::new(RichText::new(m.label()).strong().color(if on {
+                    theme::ON_BRAND
+                } else {
+                    theme::MUTED
+                }))
+                .fill(if on { theme::BRAND } else { theme::CARD })
+                .selected(on);
+                if ui.add(b).on_hover_text(m.hint()).clicked() {
+                    self.mode = m;
+                }
+            }
+            ui.add_space(8.0);
+            let on = self.show.light_window;
+            if ui
+                .add(egui::Button::new("Light window").selected(on))
+                .on_hover_text("The traffic light in a window of its own, e.g. for a second monitor (F: fullscreen)")
+                .clicked()
+            {
+                self.show.light_window = !on;
             }
             let method = self.monitor.as_ref().map(|m| m.with(|s| s.method.clone()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -561,6 +641,14 @@ impl App {
         if nav_item(ui, self.page == Page::Monitor, Some(light), "Monitor") {
             self.page = Page::Monitor;
             self.tiles.area = None;
+        }
+        let preshow = match (&self.preshow.started, &self.preshow.finished) {
+            (Some(_), None) => "Pre-show check  (running)".to_string(),
+            (Some(_), Some(_)) => "Pre-show check  (done)".to_string(),
+            _ => "Pre-show check".to_string(),
+        };
+        if nav_item(ui, self.page == Page::PreShow, None, &preshow) {
+            self.page = Page::PreShow;
         }
         if nav_item(
             ui,

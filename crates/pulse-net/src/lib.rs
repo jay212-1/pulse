@@ -20,6 +20,7 @@ pub mod interfaces;
 pub mod mdns;
 pub mod monitor;
 pub mod probe;
+pub mod tools;
 pub mod udp;
 
 pub use found::Found;

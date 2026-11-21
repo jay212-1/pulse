@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0
+
+- Modes (phase 5): CHECK, SHOW and DIAGNOSE in the top bar.
+- Pre-show check: every check runs at once and more thoroughly (five echo requests per ping),
+  a checklist with progress, problems first; known problems can be acknowledged on the spot.
+  "Technology released" with name and time writes a report: a self-contained HTML page (prints
+  well) and a CSV, next to the profile in "Reports".
+- Show mode: a calm view with the light large, only devices with a problem as big tiles (the
+  unacknowledged ones blink slowly), every area as one quiet line, no dialogs. An alert sound
+  when the light gets worse or a device gets a problem, off by default.
+- Light window: the traffic light with its reasons in a window of its own, for a second monitor
+  (F or F11: fullscreen).
+- Diagnosis: one device at a time with graphs of latency, jitter, loss, connect time, answer
+  time and frame rate (with their limits, over 5, 15 or 60 minutes), raw data, check now,
+  plain-language hints (address outside this computer's networks, firewall blocks ping, Wi-Fi
+  or cable losses, Art-Net only visible as broadcast, multicast blocked by IGMP snooping ...),
+  a test of one TCP port and traceroute.
+
 ## 0.3.0
 
 - Protocol checks (phase 4): console queries (Behringer X32/M32 and X Air via OSC `/xinfo`, Wing
