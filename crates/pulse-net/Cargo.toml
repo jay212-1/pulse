@@ -1,0 +1,22 @@
+[package]
+name = "pulse-net"
+description = "Pulse probes and scheduler: the read-only network side"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+pulse-core.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+socket2 = { version = "0.6", features = ["all"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros"] }
+
+[lints]
+workspace = true
