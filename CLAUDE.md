@@ -65,6 +65,13 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   (pre-show check, sign-off, report), `app_show.rs` (show mode, light window, alert sound),
   `app_diagnose.rs` (graphs, hints, tools), `platform.rs` (open a file, alert sound), `theme.rs` (suite colours, drawn status symbols),
   `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
+- `pulse-core` also has `sacn.rs` (E1.31 parser, priorities), `snmp.rs` (v2c BER codec, how a
+  switch port is judged), `agent.rs` (Pulse Agent's JSON and how it is judged) and `exchange.rs`
+  (import from Blueprint's Showtime exchange file). `pulse-net` has `sacn.rs` (listener, multicast
+  groups), `snmp.rs` and `agent.rs` (probes), `http.rs` (tiny HTTP/1.1) and `status_page.rs`
+  (+ `status_page.html`, TCP 7470).
+- `crates/pulse-agent` – the agent for show computers (`pulse-agent`, TCP 7471, read-only, `sysinfo`
+  pinned to 0.36.1 for the MSRV).
 - `crates/pulse-sim` – the simulator on 127.0.0.1 (library and program `pulse-sim`): consoles,
   Art-Net node and sender, TCP services, announcements injected into Pulse's findings (never on
   the real network), faults and scenarios. `demo.rs` is the demo venue. `tests/sim.rs` has the
@@ -83,6 +90,7 @@ PULSE_SHOTS=/some/folder cargo test -p pulse --test ui   # UI tests also write s
 cargo run -p pulse-net --example watch -- 127.0.0.1 192.0.2.1
 cargo run --release -p pulse-sim -- sim.pulse   # simulated devices + their profile
 cargo test --release -p pulse-sim --test sim -- --ignored --nocapture   # load measurement
+cargo run --release -p pulse-agent -- --port 7471   # the agent
 ```
 
 - Pulse never writes to devices: probes only ask (ping, TCP connect and close, protocol queries).

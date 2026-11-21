@@ -9,10 +9,12 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod agent;
 pub mod artnet;
 pub mod demo;
 pub mod discovery;
 pub mod events;
+pub mod exchange;
 pub mod hints;
 pub mod history;
 pub mod model;
@@ -22,6 +24,8 @@ pub mod presets;
 pub mod probe;
 pub mod profile;
 pub mod report;
+pub mod sacn;
+pub mod snmp;
 pub mod status;
 
 pub use events::{Event, EventKind, EventLog};

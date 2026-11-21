@@ -69,6 +69,10 @@ pub struct Found {
     pub artnet_state: Listener,
     /// The UDP port the Art-Net listener is bound to.
     pub artnet_port: Option<u16>,
+    pub sacn: pulse_core::sacn::Seen,
+    pub sacn_state: Listener,
+    /// The UDP port the sACN listener is bound to.
+    pub sacn_port: Option<u16>,
     /// Full name -> service.
     pub mdns: BTreeMap<String, Service>,
     pub mdns_state: Listener,
@@ -185,6 +189,7 @@ impl Found {
     /// Forget what was not seen for a minute.
     pub fn prune(&mut self, now: Ms) {
         self.artnet.prune(now);
+        self.sacn.prune(now);
         self.consoles.retain(|_, c| c.at + 60_000 >= now);
     }
 }

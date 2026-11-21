@@ -19,6 +19,7 @@ fn opts() -> Options {
         mdns: false,
         lan: false,
         artnet_port: 0,
+        sacn_port: 0,
         ..Options::default()
     }
 }
@@ -64,6 +65,8 @@ fn cause(s: &Shared, name: &str) -> String {
 
 /// Fast checks: twice a second, short timeouts, red after 2.
 fn quick(p: &mut Profile) {
+    // The tests break devices on purpose, often: that is no flapping.
+    p.rules.flapping.changes = 100;
     for d in &mut p.devices {
         d.hysteresis = Hysteresis {
             fail_after: 2,
@@ -422,4 +425,150 @@ fn measure_network_load_with_a_hundred_devices() {
             (b - a) / wall * 100.0
         );
     }
+}
+
+#[test]
+fn sacn_snmp_and_the_agent_report_problems_and_recover() {
+    let (m, sim) = start_demo();
+    wait(&m, "the new checks OK", 15, |s| {
+        ["Media server", "Core switch", "Backup playback"]
+            .iter()
+            .all(|n| {
+                let st = s.engine.device(id(s, n)).unwrap();
+                st.status == Status::Ok
+                    && st.checks.values().all(|c| {
+                        c.last.as_ref().is_some_and(|r| {
+                            r.outcome == pulse_core::Outcome::Ok && !r.message.contains("measuring")
+                        })
+                    })
+            })
+    });
+    m.with(|s| {
+        let msg = |name: &str, i: usize| {
+            let d = s.profile.devices.iter().find(|d| d.name == name).unwrap();
+            let c = s.engine.device(d.id).unwrap();
+            c.checks
+                .get(&d.checks[i].id)
+                .unwrap()
+                .last
+                .clone()
+                .map(|r| format!("{} | {}", r.message, r.raw))
+                .unwrap()
+        };
+        assert!(
+            msg("Media server", 1).contains("from \"Media server\" (127.0.0.1) at priority 100"),
+            "{}",
+            msg("Media server", 1)
+        );
+        assert!(
+            msg("Core switch", 1).starts_with("\"core-sw1\": port 1 (Uplink FOH) is up |"),
+            "{}",
+            msg("Core switch", 1)
+        );
+        assert!(
+            msg("Backup playback", 2).starts_with("backup-mac answers"),
+            "{}",
+            msg("Backup playback", 2)
+        );
+    });
+
+    sim.set_fps("Media server", Some(4.0));
+    sim.set_closed("Core switch", true);
+    sim.set_closed("Backup agent", true);
+    wait(&m, "the problems show", 15, |s| {
+        ["Media server", "Core switch", "Backup playback"]
+            .iter()
+            .all(|n| status(s, n) == Status::Warn)
+    });
+    m.with(|s| {
+        assert!(
+            cause(s, "Media server").contains("frames per second"),
+            "{}",
+            cause(s, "Media server")
+        );
+        assert!(
+            cause(s, "Core switch").contains("port 1 (Uplink FOH) is down"),
+            "{}",
+            cause(s, "Core switch")
+        );
+        assert!(
+            cause(s, "Backup playback").contains("Lantern is not running on backup-mac"),
+            "{}",
+            cause(s, "Backup playback")
+        );
+    });
+
+    sim.set_fps("Media server", None);
+    sim.set_closed("Core switch", false);
+    sim.set_closed("Backup agent", false);
+    wait(&m, "they recover", 15, |s| {
+        ["Media server", "Core switch", "Backup playback"]
+            .iter()
+            .all(|n| status(s, n) == Status::Ok)
+    });
+
+    // Errors rising on a port, run after run: yellow.
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|sc| {
+        sc.spawn(|| {
+            let end = Instant::now() + Duration::from_secs(15);
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) && Instant::now() < end {
+                sim.add_errors("Core switch", 3);
+                std::thread::sleep(Duration::from_millis(150));
+            }
+        });
+        wait(&m, "port errors show", 15, |s| {
+            status(s, "Core switch") == Status::Warn
+        });
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    m.with(|s| {
+        assert!(
+            cause(s, "Core switch").contains("new errors since the last check"),
+            "{}",
+            cause(s, "Core switch")
+        )
+    });
+}
+
+#[test]
+fn the_agent_answers_over_http() {
+    let sim = Sim::start(vec![Spec::new(
+        "Playback",
+        Kind::Agent {
+            host: "playback-1".into(),
+            processes: vec!["Show Master".into(), "QLab".into()],
+        },
+    )])
+    .unwrap();
+    let port = sim.device("Playback").unwrap().port;
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let (code, body) = rt
+        .block_on(pulse_net::http::get(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            port,
+            &pulse_core::agent::path(&["Show Master".into(), "Lantern".into()]),
+            None,
+            Duration::from_secs(2),
+        ))
+        .unwrap();
+    assert_eq!(code, 200);
+    let st: pulse_core::agent::Status = serde_json::from_str(&body).unwrap();
+    assert_eq!(st.host, "playback-1");
+    assert_eq!(
+        st.processes,
+        vec![
+            pulse_core::agent::Process {
+                name: "Show Master".into(),
+                running: true
+            },
+            pulse_core::agent::Process {
+                name: "Lantern".into(),
+                running: false
+            },
+        ]
+    );
 }

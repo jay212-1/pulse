@@ -48,8 +48,12 @@ fn metrics(c: &Check) -> Vec<(Metric, Option<(f64, bool)>)> {
         ],
         CheckKind::Tcp { .. } => vec![(Metric::ConnectMs, Some((t.latency_ms, true)))],
         CheckKind::Ndi { .. } => vec![(Metric::ConnectMs, None)],
-        CheckKind::Console { .. } => vec![(Metric::AnswerMs, None)],
-        CheckKind::ArtNetUniverse { min_fps, .. } => vec![(Metric::Fps, Some((*min_fps, false)))],
+        CheckKind::Console { .. } | CheckKind::Snmp { .. } | CheckKind::Agent { .. } => {
+            vec![(Metric::AnswerMs, None)]
+        }
+        CheckKind::ArtNetUniverse { min_fps, .. } | CheckKind::SacnUniverse { min_fps, .. } => {
+            vec![(Metric::Fps, Some((*min_fps, false)))]
+        }
         _ => Vec::new(),
     }
 }

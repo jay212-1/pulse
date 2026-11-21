@@ -64,6 +64,29 @@ pub fn specs() -> Vec<Spec> {
                 instance: "Lantern backup".into(),
             },
         ),
+        Spec::new(
+            "Backup agent",
+            Kind::Agent {
+                host: "backup-mac".into(),
+                processes: vec!["Lantern".into()],
+            },
+        ),
+        Spec::new(
+            "Media server",
+            Kind::SacnSender {
+                universe: 2,
+                fps: 30.0,
+                priority: 100,
+                source_name: "Media server".into(),
+            },
+        ),
+        Spec::new(
+            "Core switch",
+            Kind::Switch {
+                name: "core-sw1".into(),
+                ports: vec!["Uplink FOH".into(), "Stage rack".into()],
+            },
+        ),
     ]
 }
 
@@ -82,6 +105,8 @@ pub fn scenario() -> (Vec<Step>, Duration) {
             s(105, "Light desk", Action::Fps(None)),
             s(125, "Show Master Mac", Action::Closed(true)),
             s(150, "Show Master Mac", Action::Closed(false)),
+            s(160, "Backup agent", Action::Closed(true)),
+            s(175, "Backup agent", Action::Closed(false)),
         ],
         Duration::from_secs(180),
     )
@@ -92,7 +117,7 @@ pub fn profile(sim: &Sim) -> Profile {
     let mut p = Profile {
         name: "Demo: Riverside Hall".into(),
         venue: "Riverside Hall (invented)".into(),
-        notes: "Simulated devices on this computer. The IEM rack and the projector never answer; now and then a stagebox, the light desk or Show Master has a problem for a while.".into(),
+        notes: "Simulated devices on this computer. The IEM rack and the projector never answer; now and then a stagebox, the light desk, Show Master or the backup's Lantern has a problem for a while.".into(),
         ..Profile::default()
     };
     let port = |n: &str| sim.device(n).map(|d| d.port).unwrap_or(0);
@@ -201,14 +226,40 @@ pub fn profile(sim: &Sim) -> Profile {
         "Light",
         Important,
     );
-    add(
+    let media = add(
         &mut p,
-        Preset::Switch,
+        Preset::SacnSender,
+        "Media server",
+        lo,
+        "Light",
+        Important,
+    );
+    if let Some(d) = p.device_mut(media) {
+        for c in &mut d.checks {
+            if let CheckKind::SacnUniverse { universe, .. } = &mut c.kind {
+                *universe = 2;
+            }
+        }
+    }
+    let sw = add(
+        &mut p,
+        Preset::ManagedSwitch,
         "Core switch",
         lo,
         "Network",
         Critical,
     );
+    if let Some(d) = p.device_mut(sw) {
+        for c in &mut d.checks {
+            if let CheckKind::Snmp {
+                if_index, port: pt, ..
+            } = &mut c.kind
+            {
+                *if_index = 1;
+                *pt = Some(port("Core switch"));
+            }
+        }
+    }
     add(
         &mut p,
         Preset::AccessPoint,
@@ -217,13 +268,21 @@ pub fn profile(sim: &Sim) -> Profile {
         "Network",
         Important,
     );
-    add(
+    let backup = add(
         &mut p,
         Preset::Lantern,
         "Backup playback",
         lo,
         "Backup",
         Important,
+    );
+    p.add_check(
+        backup,
+        CheckKind::Agent {
+            processes: vec!["Lantern".into()],
+            min_free_gb: 5.0,
+            port: Some(port("Backup agent")),
+        },
     );
     p
 }

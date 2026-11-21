@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Pulse</title>
+<style>
+  :root {
+    --bg: #0c0e11; --panel: #111318; --card: #171a20; --line: #262a33;
+    --text: #e6e8ec; --muted: #8b919c;
+    --ok: #22c55e; --warn: #facc15; --down: #ef4444; --unknown: #8b919c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  header b { color: var(--text); font-size: 15px; }
+  .light { display: flex; gap: 18px; align-items: center; padding: 18px 20px; border-radius: 16px;
+    border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 12%, var(--panel)); }
+  .light svg { width: 72px; height: 72px; flex: none; }
+  .word { font-size: 40px; font-weight: 700; color: var(--c); line-height: 1.1; }
+  .why { font-size: 17px; margin-top: 4px; }
+  h2 { font-size: 12px; letter-spacing: .08em; color: var(--muted); margin: 22px 0 8px; font-weight: 600; }
+  .row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px;
+    background: var(--card); border: 1px solid var(--line); margin-bottom: 6px; }
+  .row svg { width: 20px; height: 20px; flex: none; margin-top: 2px; }
+  .row .n { font-weight: 600; }
+  .row .c { color: var(--muted); font-size: 14px; }
+  .row .s { margin-left: auto; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .acked { opacity: .6; }
+  .areas { display: flex; flex-wrap: wrap; gap: 8px; }
+  .area { display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line); font-size: 14px; }
+  .area svg { width: 14px; height: 14px; }
+  .lost { display: none; margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid var(--down); color: var(--down); }
+  .lost.on { display: block; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media (max-width: 520px) {
+    .row { flex-wrap: wrap; }
+    .row > div { flex: 1; min-width: 0; }
+    .row .s { flex: 0 0 100%; margin-left: 0; padding-left: 30px; white-space: normal; }
+    .light svg { width: 56px; height: 56px; }
+    .word { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header><b id="profile">Pulse</b><span id="clock"></span></header>
+  <section class="light" id="light" style="--c: var(--unknown)">
+    <svg viewBox="0 0 24 24" id="sym"></svg>
+    <div><div class="word" id="word">Waiting</div><div class="why" id="why">Waiting for the first results.</div></div>
+  </section>
+  <div class="lost" id="lost">No connection to Pulse. The status shown is old.</div>
+  <h2 id="problems-h" hidden>PROBLEMS</h2>
+  <div id="problems"></div>
+  <h2>AREAS</h2>
+  <div class="areas" id="areas"></div>
+  <h2>ALL DEVICES</h2>
+  <div id="devices"></div>
+  <footer>Pulse status page · read-only · updates every 2 seconds</footer>
+</main>
+<script>
+const WORD = { ok: "ALL OK", warn: "WARNING", down: "PROBLEM", unknown: "UNKNOWN" };
+const LABEL = { ok: "OK", warn: "Warning", down: "Down", unknown: "Unknown" };
+// Drawn symbols, as in the app: check in a circle, triangle with !, cross in a square, dash in a ring.
+function sym(s) {
+  const c = `var(--${s})`;
+  switch (s) {
+    case "ok": return `<circle cx="12" cy="12" r="10" fill="${c}"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0c0e11" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case "warn": return `<path d="M12 2.5L22.5 21H1.5z" fill="${c}"/><path d="M12 9v5.5" stroke="#0c0e11" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="17.8" r="1.4" fill="#0c0e11"/>`;
+    case "down": return `<rect x="2" y="2" width="20" height="20" rx="3" fill="${c}"/><path d="M8 8l8 8M16 8l-8 8" stroke="#0c0e11" stroke-width="2.4" stroke-linecap="round"/>`;
+    default: return `<circle cx="12" cy="12" r="9" stroke="${c}" stroke-width="2.4" fill="none"/><path d="M8 12h8" stroke="${c}" stroke-width="2.4" stroke-linecap="round"/>`;
+  }
+}
+const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clock = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function row(d, acked) {
+  const cause = d.cause ? `<div class="c">${esc(d.cause)}</div>` : "";
+  return `<div class="row${acked ? " acked" : ""}"><svg viewBox="0 0 24 24">${sym(d.status)}</svg>`
+    + `<div><div class="n">${esc(d.name)} <span class="c">· ${esc(LABEL[d.status])}${acked ? " · acknowledged" : ""}</span></div>${cause}</div>`
+    + `<div class="s">${esc(d.area)}${d.status !== "ok" && d.since ? " · since " + clock(d.since) : ""}</div></div>`;
+}
+const rank = { down: 3, warn: 2, unknown: 1, ok: 0 };
+function show(s) {
+  document.getElementById("clock").textContent = clock(s.now);
+  if (!s.profile) {
+    document.getElementById("profile").textContent = "Pulse";
+    document.getElementById("word").textContent = "NO PROFILE";
+    document.getElementById("why").textContent = "No profile is open in Pulse.";
+    return;
+  }
+  document.title = `Pulse · ${s.profile}`;
+  document.getElementById("profile").textContent = s.venue ? `${s.profile} · ${s.venue}` : s.profile;
+  const light = document.getElementById("light");
+  light.style.setProperty("--c", `var(--${s.light})`);
+  document.getElementById("sym").innerHTML = sym(s.light);
+  document.getElementById("word").textContent = WORD[s.light];
+  const r = s.reasons[0];
+  document.getElementById("why").textContent = r
+    ? `${r.name}: ${r.cause || LABEL[r.status]} (since ${clock(r.since)})`
+    : (s.light === "ok" ? "Every device answers as expected." : "Waiting for the first results.");
+  const probs = s.reasons.map(d => row(d, false)).concat(s.acked.map(d => row(d, true)));
+  document.getElementById("problems-h").hidden = probs.length === 0;
+  document.getElementById("problems").innerHTML = probs.join("");
+  document.getElementById("areas").innerHTML = s.areas.map(a =>
+    `<span class="area"><svg viewBox="0 0 24 24">${sym(a.light)}</svg>${esc(a.area)}</span>`).join("");
+  const devs = [...s.devices].sort((a, b) => rank[b.status] - rank[a.status] || a.area.localeCompare(b.area));
+  document.getElementById("devices").innerHTML = devs.map(d => row(d, d.acked)).join("");
+}
+async function tick() {
+  try {
+    const r = await fetch("/api/status", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    show(await r.json());
+    document.getElementById("lost").classList.remove("on");
+  } catch (e) {
+    document.getElementById("lost").classList.add("on");
+  }
+}
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

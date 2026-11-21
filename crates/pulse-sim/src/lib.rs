@@ -48,6 +48,22 @@ pub enum Kind {
     Announce { service: String, instance: String },
     /// An NDI source: announced via `_ndi._tcp`, with a TCP port.
     Ndi { source: String },
+    /// Sends an sACN universe to Pulse's sACN listener.
+    SacnSender {
+        universe: u16,
+        fps: f64,
+        priority: u8,
+        source_name: String,
+    },
+    /// A managed switch answering SNMP v2c (community "public"). Closed: its
+    /// first port goes down; errors: [`Sim::add_errors`].
+    Switch { name: String, ports: Vec<String> },
+    /// Pulse Agent on a show computer running `processes`. Closed: the first
+    /// of them stops.
+    Agent {
+        host: String,
+        processes: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -76,6 +92,8 @@ pub struct Fault {
     pub slow_ms: AtomicU32,
     /// Frame rate instead of the configured one (0 = configured), in 1/100 fps.
     pub fps_centi: AtomicU32,
+    /// Error counter of a switch's ports.
+    pub errors: AtomicU64,
 }
 
 pub struct Device {
@@ -107,6 +125,13 @@ pub struct Sim {
 
 fn target_found(t: &Target) -> Option<Arc<Mutex<Found>>> {
     t.lock().ok().and_then(|g| g.clone())
+}
+
+/// Pulse's sACN listener, if one runs.
+fn sacn_dest(t: &Target) -> Option<SocketAddr> {
+    let f = target_found(t)?;
+    let port = lock(&f).sacn_port?;
+    Some(SocketAddr::from((Ipv4Addr::LOCALHOST, port)))
 }
 
 /// Pulse's Art-Net listener, if one runs.
@@ -191,6 +216,12 @@ impl Sim {
     pub fn set_slow(&self, name: &str, ms: u32) {
         if let Some(f) = self.fault(name) {
             f.slow_ms.store(ms, Ordering::Relaxed);
+        }
+    }
+    /// More errors on the switch's ports.
+    pub fn add_errors(&self, name: &str, n: u64) {
+        if let Some(f) = self.fault(name) {
+            f.errors.fetch_add(n, Ordering::Relaxed);
         }
     }
     /// Another frame rate (`None`: the configured one again).
@@ -466,6 +497,183 @@ fn spawn_device(
             Ok(port)
         }
         Kind::Announce { .. } => Ok(0),
+        Kind::SacnSender {
+            universe,
+            fps,
+            priority,
+            source_name,
+        } => {
+            let sock = pulse_net::udp::bind(Ipv4Addr::LOCALHOST, 0, false)?;
+            h.spawn(async move {
+                let mut d = pulse_core::sacn::Data {
+                    cid: *b"pulse-sim-sacn\0\0",
+                    source_name,
+                    priority,
+                    sequence: 0,
+                    universe,
+                    terminated: false,
+                    preview: false,
+                    start_code: 0,
+                    channels: 0,
+                };
+                let mut level: u8 = 0;
+                loop {
+                    let o = fault.fps_centi.load(Ordering::Relaxed);
+                    let rate = if o > 0 { f64::from(o) / 100.0 } else { fps }.clamp(0.1, 60.0);
+                    tokio::time::sleep(Duration::from_secs_f64(1.0 / rate)).await;
+                    if fault.down.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    let Some(to) = sacn_dest(&target) else {
+                        continue;
+                    };
+                    d.sequence = d.sequence.wrapping_add(1);
+                    level = level.wrapping_add(3);
+                    let mut ch = [0u8; 512];
+                    ch[0] = level;
+                    if sock
+                        .send_to(&pulse_core::sacn::data(&d, &ch), to)
+                        .await
+                        .is_ok()
+                    {
+                        sent.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            });
+            Ok(0)
+        }
+        Kind::Switch { name, ports } => {
+            let sock = pulse_net::udp::bind(Ipv4Addr::LOCALHOST, 0, false)?;
+            let port = sock.local_addr()?.port();
+            let started = std::time::Instant::now();
+            h.spawn(async move {
+                use pulse_core::snmp::{self, Message, Value};
+                let mut buf = vec![0u8; 1500];
+                loop {
+                    let Ok((n, from)) = sock.recv_from(&mut buf).await else {
+                        continue;
+                    };
+                    if fault.down.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    let Some(m) = Message::decode(&buf[..n]) else {
+                        continue;
+                    };
+                    if m.pdu != snmp::GET || m.community != "public" {
+                        continue;
+                    }
+                    let errors = fault.errors.load(Ordering::Relaxed);
+                    let first_down = fault.closed.load(Ordering::Relaxed);
+                    let vars = m
+                        .vars
+                        .iter()
+                        .map(|(oid, _)| {
+                            let port_of = |i: u32| ports.get((i as usize).wrapping_sub(1));
+                            let v = if *oid == snmp::sys_name() {
+                                Value::Bytes(name.as_bytes().to_vec())
+                            } else if *oid == snmp::sys_uptime() {
+                                Value::Ticks(started.elapsed().as_millis() as u64 / 10 + 360_000)
+                            } else if oid.len() == 11 && oid[..9] == [1, 3, 6, 1, 2, 1, 2, 2, 1] {
+                                let i = oid[10];
+                                match (oid[9], port_of(i)) {
+                                    (_, None) => Value::NoSuchInstance,
+                                    (2, Some(p)) => Value::Bytes(p.as_bytes().to_vec()),
+                                    (8, Some(_)) => {
+                                        Value::Int(if i == 1 && first_down { 2 } else { 1 })
+                                    }
+                                    (14, Some(_)) => Value::Counter(errors),
+                                    (20, Some(_)) => Value::Counter(0),
+                                    _ => Value::NoSuchObject,
+                                }
+                            } else {
+                                Value::NoSuchObject
+                            };
+                            (oid.clone(), v)
+                        })
+                        .collect();
+                    let resp = Message {
+                        pdu: snmp::RESPONSE,
+                        vars,
+                        ..m
+                    };
+                    if sock.send_to(&resp.encode(), from).await.is_ok() {
+                        sent.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            });
+            Ok(port)
+        }
+        Kind::Agent { host, processes } => {
+            let l = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?;
+            let port = l.local_addr()?.port();
+            l.set_nonblocking(true)?;
+            let first = tokio::net::TcpListener::from_std(l)?;
+            h.spawn(agent_service(first, port, fault, host, processes));
+            Ok(port)
+        }
+    }
+}
+
+/// A simulated Pulse Agent; down = refused.
+async fn agent_service(
+    first: tokio::net::TcpListener,
+    port: u16,
+    fault: Arc<Fault>,
+    host: String,
+    processes: Vec<String>,
+) {
+    let mut l = Some(first);
+    let started = std::time::Instant::now();
+    loop {
+        let off = fault.down.load(Ordering::Relaxed);
+        match (&l, off) {
+            (Some(_), true) => l = None,
+            (None, false) => {
+                l = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port))
+                    .await
+                    .ok();
+            }
+            _ => {}
+        }
+        let Some(listener) = &l else {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            continue;
+        };
+        let Ok(Ok((mut s, _))) =
+            tokio::time::timeout(Duration::from_millis(200), listener.accept()).await
+        else {
+            continue;
+        };
+        let Some((_, path)) = pulse_net::http::read_request(&mut s).await else {
+            continue;
+        };
+        let stopped = fault.closed.load(Ordering::Relaxed);
+        let st = pulse_core::agent::Status {
+            agent: "pulse-agent".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            host: host.clone(),
+            os: "simulated".into(),
+            uptime_s: started.elapsed().as_secs() + 7200,
+            cpu_percent: 14.0,
+            mem_used_mb: 6100,
+            mem_total_mb: 16384,
+            disk_free_gb: 212.0,
+            disk_total_gb: 500.0,
+            processes: pulse_core::agent::processes_of(&path)
+                .into_iter()
+                .map(|name| {
+                    let i = processes.iter().position(|p| p.eq_ignore_ascii_case(&name));
+                    let running = match i {
+                        Some(0) => !stopped,
+                        Some(_) => true,
+                        None => false,
+                    };
+                    pulse_core::agent::Process { name, running }
+                })
+                .collect(),
+        };
+        let body = serde_json::to_string(&st).unwrap_or_default();
+        pulse_net::http::respond(&mut s, 200, "application/json", body.as_bytes()).await;
     }
 }
 

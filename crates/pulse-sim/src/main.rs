@@ -7,7 +7,8 @@
 //!
 //! PROFILE defaults to `pulse-sim.pulse` in the current folder. `--calm`
 //! leaves out the scenario (nothing goes wrong by itself). The light desk
-//! sends its universe to 127.0.0.1:6454, where Pulse listens.
+//! sends its universe to 127.0.0.1:6454 and the media server sACN to
+//! 127.0.0.1:5568, where Pulse listens.
 //!
 //! The simulator never announces anything on the real network. Without a
 //! Pulse in the same process the Dante and Lantern announcements cannot
@@ -50,6 +51,7 @@ fn main() -> ExitCode {
     // Art-Net to where a Pulse on this computer listens.
     let found = Found {
         artnet_port: Some(pulse_core::artnet::PORT),
+        sacn_port: Some(pulse_core::sacn::PORT),
         ..Found::default()
     };
     sim.attach(Arc::new(Mutex::new(found)));
@@ -88,7 +90,7 @@ fn main() -> ExitCode {
         if calm {
             ""
         } else {
-            "Now and then a stagebox, the light desk or Show Master has a problem. "
+            "Now and then a stagebox, the light desk, Show Master or the backup's Lantern has a problem. "
         }
     );
     loop {

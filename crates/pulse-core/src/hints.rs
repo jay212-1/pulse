@@ -92,6 +92,28 @@ pub fn hints(d: &Device, last: &[Option<&ProbeResult>], nets: &[Net]) -> Vec<Str
                     say("Few frames per second: some desks send less when nothing changes. Lower the minimum if that is normal for this desk.".into());
                 }
             }
+            CheckKind::SacnUniverse { .. } => {
+                if failed(r) {
+                    say("No sACN frames: is the desk sending this universe? sACN goes to a multicast group; a switch with IGMP snooping but no querier may stop forwarding it. Unicast sACN to another node is invisible here.".into());
+                } else if msg.contains("conflict") {
+                    say("Two sources send the same universe at the same priority: receivers merge or jump between them. Give the backup a lower priority.".into());
+                } else if r.outcome == Outcome::Degraded {
+                    say("Few frames per second: some desks send less when nothing changes. Lower the minimum if that is normal for this desk.".into());
+                }
+            }
+            CheckKind::Snmp { .. } if failed(r) && ping_ok => {
+                if msg.contains(" is down") || msg.contains("layer down") {
+                    say("The switch says the port has no link: cable, plug or the device on that port.".into());
+                } else if !msg.contains("has no port") {
+                    say("The switch answers ping but not SNMP: SNMP may be off, the community wrong, or only allowed from some addresses.".into());
+                }
+            }
+            CheckKind::Snmp { .. } if msg.contains("new errors") => say(
+                "Rising error counters on a port: a bad cable or plug, or a duplex mismatch.".into(),
+            ),
+            CheckKind::Agent { .. } if failed(r) && ping_ok && !msg.contains("not running") => say(
+                "The computer answers ping but not Pulse Agent: is the agent running there, and does its firewall allow TCP 7471?".into(),
+            ),
             CheckKind::Mdns { .. } | CheckKind::Ndi { .. } if failed(r) => say(
                 "Announcements use multicast: switches with IGMP snooping but no querier drop them after a few minutes. Check the switch's IGMP settings.".into(),
             ),

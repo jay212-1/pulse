@@ -202,7 +202,7 @@ fn inventory_bulk_changes_and_delete_with_confirmation() {
     assert_eq!(h.state().page, Page::Inventory);
     h.get_by_label("Select all").click();
     settle(&mut h);
-    h.get_by_label("13 devices selected");
+    h.get_by_label("14 devices selected");
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Optional")
         .click();
     settle(&mut h);
@@ -215,10 +215,10 @@ fn inventory_bulk_changes_and_delete_with_confirmation() {
     h.get_by_label("Delete…").click();
     settle(&mut h);
     // Nothing gone before the confirmation.
-    assert_eq!(h.state().profile().unwrap().devices.len(), 13);
+    assert_eq!(h.state().profile().unwrap().devices.len(), 14);
     h.get_by_label("Cancel").click();
     settle(&mut h);
-    assert_eq!(h.state().profile().unwrap().devices.len(), 13);
+    assert_eq!(h.state().profile().unwrap().devices.len(), 14);
     h.get_by_label("Select none").click();
     settle(&mut h);
     h.get_by_label("FOH desk").click();
@@ -239,7 +239,7 @@ fn inventory_bulk_changes_and_delete_with_confirmation() {
     h.get_by_label("Delete").click();
     settle(&mut h);
     let p = h.state().profile().unwrap();
-    assert_eq!(p.devices.len(), 12);
+    assert_eq!(p.devices.len(), 13);
     assert!(p.devices.iter().all(|d| d.name != "FOH desk"));
 }
 
@@ -421,7 +421,7 @@ fn show_mode_is_calm_and_the_light_window_opens() {
     h.get_by_label("Problem IEM rack: Down");
     // OK devices are not shown one by one, and there is no navigation.
     assert!(h.query_by_label("Device FOH desk: OK").is_none());
-    assert!(h.query_by_label("Inventory  (13)").is_none());
+    assert!(h.query_by_label("Inventory  (14)").is_none());
     h.get_by_label("Sound on new problems");
     assert!(!h.state().settings.sound, "the sound is off by default");
     shot(&mut h, "show");
@@ -436,7 +436,7 @@ fn show_mode_is_calm_and_the_light_window_opens() {
     h.get_by_role_and_label(egui::accesskit::Role::Button, "CHECK")
         .click();
     settle(&mut h);
-    h.get_by_label("Inventory  (13)");
+    h.get_by_label("Inventory  (14)");
 }
 
 #[test]
@@ -480,4 +480,101 @@ fn diagnose_shows_graphs_hints_and_tests_a_port() {
             .is_some()
     });
     h.get_by_label_contains("Port 80");
+}
+
+/// A plain GET (the status page closes after each answer).
+fn http_get(url: &str) -> String {
+    use std::io::{Read, Write};
+    let rest = url.strip_prefix("http://").unwrap();
+    let (host, path) = rest.split_once('/').unwrap();
+    let mut s = std::net::TcpStream::connect(host).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+    write!(
+        s,
+        "GET /{path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut out = String::new();
+    s.read_to_string(&mut out).unwrap();
+    out
+}
+
+#[test]
+fn the_status_page_shows_the_open_profile() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    wait(&mut h, "the IEM rack down", 15, |a| {
+        device_status(a, "IEM rack") == Status::Down
+    });
+    h.get_by_label("Status page").click();
+    settle(&mut h);
+    let port = h.state().status_page.as_ref().unwrap().port;
+    let url = format!("http://127.0.0.1:{port}/");
+    h.get_by_label(&url);
+    assert!(http_get(&url).contains("Pulse status page"));
+    let api = http_get(&format!("{url}api/status"));
+    assert!(
+        api.contains("\"profile\":\"Demo: Riverside Hall\""),
+        "{api}"
+    );
+    assert!(api.contains("\"name\":\"IEM rack\""), "{api}");
+    // Read-only.
+    {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        write!(
+            s,
+            "POST /api/status HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n"
+        )
+        .unwrap();
+        let mut out = String::new();
+        s.read_to_string(&mut out).unwrap();
+        assert!(out.starts_with("HTTP/1.1 405"), "{out}");
+    }
+    shot(&mut h, "status_page_on");
+    h.get_by_label("Status page").click();
+    settle(&mut h);
+    assert!(h.state().status_page.is_none());
+    assert!(!h.state().settings.status_page);
+    assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_err());
+}
+
+#[test]
+fn devices_come_over_from_a_blueprint_exchange_file() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    h.state_mut().page = Page::Inventory;
+    settle(&mut h);
+    h.get_by_label("Import from Blueprint…");
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("Harbour.showtime.json");
+    std::fs::write(
+        &file,
+        r#"{"format":"showtime-exchange","version":1,"production":{"name":"Harbour","venue":"x"},
+           "devices":[
+             {"name":"Si Impact","kind":"console","location":"FOH","model":"Soundcraft Si Impact","address":"127.0.0.1"},
+             {"name":"MA3","kind":"console","location":"Light","model":"grandMA3 light","address":""},
+             {"name":"FOH desk","kind":"console","location":"FOH","model":"X32","address":"10.0.0.1"}
+           ]}"#,
+    )
+    .unwrap();
+    h.state_mut().import_exchange(Some(file));
+    settle(&mut h);
+    h.get_by_label("Blueprint: 2 devices added, 1 without an address (switched off)");
+    let p = h.state().profile().unwrap();
+    assert_eq!(p.devices.len(), 16);
+    let si = p.devices.iter().find(|d| d.name == "Si Impact").unwrap();
+    assert!(si
+        .checks
+        .iter()
+        .any(|c| c.kind == pulse_core::CheckKind::Tcp { port: 3804 }));
+    // The demo's own FOH desk keeps its address.
+    let foh = p.devices.iter().find(|d| d.name == "FOH desk").unwrap();
+    assert_eq!(foh.address, "127.0.0.1");
+    h.state_mut()
+        .import_exchange(Some(dir.path().join("missing.json")));
+    settle(&mut h);
+    h.get_by_label_contains("Cannot import: ");
 }

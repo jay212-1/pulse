@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.0
+
+- Status page (phase 7): Pulse's traffic light for phones and other computers of the crew, read-only,
+  on TCP 7470, with problems first, areas and all devices; it updates every 2 seconds and says when
+  the connection to Pulse is lost. Off by default; "Status page" in the status bar switches it on
+  and shows its address. While on, it is announced as `_pulse._tcp`.
+- Pulse Agent: a small program for show computers (`pulse-agent`, TCP 7471). Asked by Pulse, it
+  tells CPU, memory, free disk space and whether named programs run (e.g. Show Master, Lantern,
+  QLab). It only answers; it sends nothing by itself and changes nothing. New check "Pulse Agent"
+  and preset "Show computer with Pulse Agent".
+- sACN (E1.31): new check "sACN universe": frames per second and who sends at which priority. A
+  backup at a lower priority is fine, two sources at the same priority are a conflict. Pulse joins
+  the universe's multicast group only while a check needs it. Preset "Lighting desk (sACN)".
+- SNMP: new check "SNMP switch" (v2c, read-only): the switch answers, and a chosen port is up and
+  gets no new errors; a restart shows. Preset "Managed switch (SNMP)".
+- Import from Blueprint: "Import from Blueprint…" in the inventory takes over the devices of a
+  Showtime exchange file (Blueprint 0.2.4 and later) with a preset from their kind and model, the
+  location as the area and their address. Devices without an address come in switched off;
+  devices already there only get what they lack.
+- Presets for the Soundcraft Si Impact / Expression / Performer (ping and the HiQnet control port
+  TCP 3804) and grandMA3 (ping, ArtPoll and the universe's frames).
+- Frame rates are right from the first frame: no false "only 2 frames per second" when a universe
+  starts or Pulse has just started.
+- The demo has a media server sending sACN, the core switch over SNMP and Pulse Agent on the backup
+  computer; now and then Lantern stops there.
+- Simulator: sACN sender, SNMP switch and Pulse Agent.
+
 ## 0.5.0
 
 - Simulator (phase 6): `pulse-sim`, invented show devices on this computer. A desk that answers

@@ -11,6 +11,9 @@ pub enum Preset {
     X32,
     XAir,
     Wing,
+    /// Soundcraft Si Impact / Expression / Performer: the control port
+    /// (HiQnet, TCP 3804) that ViSi Remote uses.
+    SoundcraftSi,
     /// A console Pulse cannot ask: ping only.
     OtherConsole,
     DanteDevice,
@@ -18,30 +21,43 @@ pub enum Preset {
     ArtNetNode,
     /// A lighting desk or media server that sends Art-Net.
     ArtNetSender,
+    /// grandMA3 console or onPC sending Art-Net (it also answers ArtPoll).
+    GrandMa3,
+    /// A lighting desk or media server that sends sACN (E1.31).
+    SacnSender,
     TabletWifi,
     ShowMaster,
     Lantern,
     Switch,
+    /// A managed switch that answers SNMP.
+    ManagedSwitch,
     AccessPoint,
+    /// A show computer with Pulse Agent.
+    AgentComputer,
     /// Anything else: ping.
     Generic,
 }
 
 impl Preset {
-    pub const ALL: [Preset; 14] = [
+    pub const ALL: [Preset; 19] = [
         Preset::X32,
         Preset::XAir,
         Preset::Wing,
+        Preset::SoundcraftSi,
         Preset::OtherConsole,
         Preset::DanteDevice,
         Preset::NdiSource,
         Preset::ArtNetNode,
         Preset::ArtNetSender,
+        Preset::GrandMa3,
+        Preset::SacnSender,
         Preset::TabletWifi,
         Preset::ShowMaster,
         Preset::Lantern,
         Preset::Switch,
+        Preset::ManagedSwitch,
         Preset::AccessPoint,
+        Preset::AgentComputer,
         Preset::Generic,
     ];
 
@@ -50,15 +66,20 @@ impl Preset {
             Preset::X32 => "Behringer X32 / Midas M32",
             Preset::XAir => "Behringer X Air / Midas MR",
             Preset::Wing => "Behringer Wing",
+            Preset::SoundcraftSi => "Soundcraft Si Impact / Expression / Performer",
             Preset::OtherConsole => "Other console (basic checks)",
             Preset::DanteDevice => "Dante device",
             Preset::NdiSource => "NDI source",
             Preset::ArtNetNode => "Art-Net node",
             Preset::ArtNetSender => "Lighting desk (Art-Net)",
+            Preset::SacnSender => "Lighting desk (sACN)",
+            Preset::GrandMa3 => "grandMA3 (Art-Net)",
             Preset::TabletWifi => "Tablet on Wi-Fi",
             Preset::ShowMaster => "Show Master computer",
             Preset::Lantern => "Lantern computer",
             Preset::Switch => "Network switch",
+            Preset::ManagedSwitch => "Managed switch (SNMP)",
+            Preset::AgentComputer => "Show computer with Pulse Agent",
             Preset::AccessPoint => "Wi-Fi access point",
             Preset::Generic => "Other device (ping)",
         }
@@ -70,12 +91,17 @@ impl Preset {
             Preset::X32 | Preset::XAir => "Ping, and asks the desk who it is (OSC /xinfo).",
             Preset::Wing => "Ping, and asks the desk who it is (Wing discovery).",
             Preset::OtherConsole => "Ping only: Pulse cannot ask this desk anything.",
+            Preset::SoundcraftSi => "Ping, and the control port (HiQnet, TCP 3804) that ViSi Remote connects to. Audio is not checked.",
+            Preset::GrandMa3 => "Ping, the answer to ArtPoll, and the frames of universe 0 (at least 20 per second). Set the universe to the one the desk sends.",
             Preset::DanteDevice => {
                 "Ping, and the Dante announcement (mDNS). Clock and audio are not checked."
             }
             Preset::NdiSource => "Ping, the NDI announcement and its port.",
             Preset::ArtNetNode => "Ping, and the answer to ArtPoll.",
             Preset::ArtNetSender => "Ping, and the frames of universe 0 (at least 20 per second).",
+            Preset::SacnSender => "Ping, and the sACN frames of universe 1 (at least 20 per second).",
+            Preset::ManagedSwitch => "Ping, and the switch answers SNMP (read-only, community \"public\"). Add a port to watch it.",
+            Preset::AgentComputer => "Ping, and Pulse Agent on the computer: CPU, memory, free disk, programs that must run.",
             Preset::TabletWifi => "Ping with Wi-Fi limits (more latency allowed, loss matters).",
             Preset::ShowMaster => "Ping, and the Show Master web port 7400.",
             Preset::Lantern => "Ping, and the Lantern announcement (mDNS).",
@@ -89,7 +115,10 @@ impl Preset {
             Preset::DanteDevice => DeviceKind::Stagebox,
             Preset::NdiSource => DeviceKind::NdiSource,
             Preset::ArtNetNode => DeviceKind::ArtNetNode,
-            Preset::ArtNetSender => DeviceKind::Console,
+            Preset::ArtNetSender | Preset::SacnSender | Preset::GrandMa3 => DeviceKind::Console,
+            Preset::SoundcraftSi => DeviceKind::Console,
+            Preset::ManagedSwitch => DeviceKind::Switch,
+            Preset::AgentComputer => DeviceKind::Computer,
             Preset::TabletWifi => DeviceKind::Tablet,
             Preset::ShowMaster | Preset::Lantern => DeviceKind::Computer,
             Preset::Switch => DeviceKind::Switch,
@@ -105,7 +134,11 @@ impl Preset {
             Preset::DanteDevice => "Dante device",
             Preset::NdiSource => "NDI source",
             Preset::ArtNetNode => "Art-Net node",
-            Preset::ArtNetSender => "Lighting desk",
+            Preset::ArtNetSender | Preset::SacnSender => "Lighting desk",
+            Preset::GrandMa3 => "grandMA3",
+            Preset::SoundcraftSi => "Si Impact",
+            Preset::ManagedSwitch => "Switch",
+            Preset::AgentComputer => "Show computer",
             Preset::TabletWifi => "Tablet",
             Preset::ShowMaster => "Show Master",
             Preset::Lantern => "Lantern",
@@ -142,6 +175,28 @@ impl Preset {
                 universe: 0,
                 min_fps: 20.0,
             }],
+            Preset::SoundcraftSi => vec![CheckKind::Tcp { port: 3804 }],
+            Preset::GrandMa3 => vec![
+                CheckKind::ArtNetNode,
+                CheckKind::ArtNetUniverse {
+                    universe: 0,
+                    min_fps: 20.0,
+                },
+            ],
+            Preset::SacnSender => vec![CheckKind::SacnUniverse {
+                universe: 1,
+                min_fps: 20.0,
+            }],
+            Preset::ManagedSwitch => vec![CheckKind::Snmp {
+                community: "public".into(),
+                if_index: 0,
+                port: None,
+            }],
+            Preset::AgentComputer => vec![CheckKind::Agent {
+                processes: Vec::new(),
+                min_free_gb: 5.0,
+                port: None,
+            }],
             Preset::ShowMaster => vec![CheckKind::Tcp { port: 7400 }],
             Preset::Lantern => vec![CheckKind::Mdns {
                 service: LANTERN_SERVICE.into(),
@@ -157,10 +212,13 @@ impl Preset {
 
     pub fn criticality(self) -> Criticality {
         match self {
-            Preset::X32 | Preset::XAir | Preset::Wing | Preset::OtherConsole => {
-                Criticality::Critical
-            }
-            Preset::Switch => Criticality::Critical,
+            Preset::X32
+            | Preset::XAir
+            | Preset::Wing
+            | Preset::SoundcraftSi
+            | Preset::OtherConsole
+            | Preset::GrandMa3 => Criticality::Critical,
+            Preset::Switch | Preset::ManagedSwitch => Criticality::Critical,
             _ => Criticality::Important,
         }
     }
@@ -183,6 +241,32 @@ impl Profile {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn soundcraft_si_and_grandma3() {
+        let mut p = Profile::default();
+        let si = p.add_preset(Preset::SoundcraftSi, "Si Impact", "192.168.1.20");
+        let d = p.device(si).cloned().unwrap_or_default();
+        assert_eq!(d.kind, DeviceKind::Console);
+        assert_eq!(d.criticality, Criticality::Critical);
+        assert_eq!(d.checks[1].kind, CheckKind::Tcp { port: 3804 });
+        let ma = p.add_preset(Preset::GrandMa3, "grandMA3", "2.0.0.10");
+        let kinds: Vec<CheckKind> = p
+            .device(ma)
+            .map(|d| d.checks.iter().map(|c| c.kind.clone()).collect())
+            .unwrap_or_default();
+        assert_eq!(
+            kinds,
+            vec![
+                CheckKind::Ping,
+                CheckKind::ArtNetNode,
+                CheckKind::ArtNetUniverse {
+                    universe: 0,
+                    min_fps: 20.0
+                }
+            ]
+        );
+    }
 
     #[test]
     fn presets_bring_their_checks() {

@@ -206,6 +206,8 @@ pub const SOURCE_TTL_MS: Ms = 3000;
 #[derive(Clone, Debug, Default)]
 pub struct Universe {
     frames: VecDeque<Ms>,
+    /// The first frame (after a gap of more than the window).
+    first: Option<Ms>,
     pub last: Option<Ms>,
     pub channels: u16,
     /// Sender -> last frame from it.
@@ -214,6 +216,9 @@ pub struct Universe {
 
 impl Universe {
     pub fn record(&mut self, from: Ipv4Addr, channels: u16, now: Ms) {
+        if self.last.is_none_or(|t| t + FPS_WINDOW_MS < now) {
+            self.first = Some(now);
+        }
         self.frames.push_back(now);
         while self
             .frames
@@ -226,14 +231,24 @@ impl Universe {
         self.channels = channels;
         self.sources.insert(from, now);
     }
-    /// Frames per second over the last two seconds.
+    /// Frames per second over the last two seconds (or since the first
+    /// frame, if that is more recent: no false "too few" right at the start).
     pub fn fps(&self, now: Ms) -> f64 {
         let n = self
             .frames
             .iter()
             .filter(|&&t| t + FPS_WINDOW_MS >= now)
             .count();
-        n as f64 * 1000.0 / FPS_WINDOW_MS as f64
+        let since = self
+            .first
+            .map(|f| now.saturating_sub(f))
+            .unwrap_or(FPS_WINDOW_MS)
+            .clamp(500, FPS_WINDOW_MS);
+        n as f64 * 1000.0 / since as f64
+    }
+    /// Frames arrive for less than a second: too early to judge the rate.
+    pub fn measuring(&self, now: Ms) -> bool {
+        self.first.is_some_and(|f| now.saturating_sub(f) < 1000)
     }
     /// Who sent in the last three seconds.
     pub fn senders(&self, now: Ms) -> Vec<Ipv4Addr> {
@@ -286,6 +301,27 @@ impl Seen {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frame_rate_right_from_the_start() {
+        let ip = Ipv4Addr::new(10, 0, 0, 9);
+        let mut u = Universe::default();
+        // 40 fps for 0.6 s: 40, not 12 (24 frames over a 2 s window).
+        for i in 0..24 {
+            u.record(ip, 512, 10_000 + i * 25);
+        }
+        let fps = u.fps(10_600);
+        assert!((38.0..=42.0).contains(&fps), "{fps}");
+        // Steady: over the window.
+        for i in 24..200 {
+            u.record(ip, 512, 10_000 + i * 25);
+        }
+        let fps = u.fps(15_000);
+        assert!((39.0..=41.0).contains(&fps), "{fps}");
+        // After a long gap the count starts again.
+        u.record(ip, 512, 30_000);
+        assert!(u.fps(30_100) <= 2.0);
+    }
 
     #[test]
     fn poll_is_a_valid_art_net_packet() {

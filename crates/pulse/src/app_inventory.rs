@@ -131,6 +131,13 @@ impl App {
                     }
                 }
             });
+            if ui
+                .button("Import from Blueprint…")
+                .on_hover_text("Take over the devices of a Showtime exchange file (Blueprint: Production > Export exchange file). Devices already here only get what they lack.")
+                .clicked()
+            {
+                self.import_exchange(None);
+            }
             let any = !sel.is_empty();
             if ui
                 .add_enabled(any, egui::Button::new("Duplicate"))
@@ -564,6 +571,15 @@ fn check_hint(k: &CheckKind) -> &'static str {
         CheckKind::Mdns { .. } => "The device announces a service (Dante: _netaudio-arc._udp)",
         CheckKind::Ndi { .. } => "The NDI source is announced and its port accepts connections",
         CheckKind::Interface { .. } => "A network interface of this computer is up",
+        CheckKind::SacnUniverse { .. } => {
+            "sACN (E1.31) frames of a universe arrive, fast enough; a backup at a lower priority is fine"
+        }
+        CheckKind::Snmp { .. } => {
+            "Asks the switch over SNMP v2c (read-only): name, uptime, and a port's link and errors"
+        }
+        CheckKind::Agent { .. } => {
+            "Asks Pulse Agent on the computer: CPU, memory, free disk, and that the named programs run"
+        }
     }
 }
 
@@ -632,6 +648,44 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check, nics: &[Nic]) -> bool {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("interface").color(theme::MUTED));
                         interface_choice(ui, ("check_iface", c.id), name, nics, "The device's interface");
+                    });
+                }
+                CheckKind::SacnUniverse { universe, min_fps } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("universe").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(universe).range(1..=pulse_core::sacn::MAX_UNIVERSE));
+                        ui.label(RichText::new("at least").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(min_fps).range(1.0..=44.0).speed(0.5).suffix(" fps"));
+                    });
+                }
+                CheckKind::Snmp { community, if_index, .. } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("community").color(theme::MUTED));
+                        ui.add(egui::TextEdit::singleline(community).desired_width(110.0).font(egui::TextStyle::Monospace));
+                        ui.label(RichText::new("port").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(if_index).range(0..=100_000))
+                            .on_hover_text("The switch's interface number (ifIndex); 0: only the switch itself");
+                        if *if_index == 0 {
+                            ui.label(RichText::new("switch only").small().color(theme::MUTED));
+                        }
+                    });
+                }
+                CheckKind::Agent { processes, min_free_gb, .. } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("programs").color(theme::MUTED));
+                        let mut text = processes.join(",");
+                        if ui
+                            .add(egui::TextEdit::singleline(&mut text).hint_text("e.g. Show Master, Lantern").desired_width(220.0))
+                            .on_hover_text("Programs that must run there, separated by commas")
+                            .changed()
+                        {
+                            *processes = text.split(',').map(String::from).collect();
+                            if processes.iter().all(|p| p.is_empty()) {
+                                processes.clear();
+                            }
+                        }
+                        ui.label(RichText::new("free disk at least").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(min_free_gb).range(0.0..=10_000.0).speed(0.5).suffix(" GB"));
                     });
                 }
                 _ => {}

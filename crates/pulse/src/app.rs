@@ -142,6 +142,10 @@ pub struct App {
     pub lan: bool,
     /// A short message in the status bar: text, colour, when.
     pub notice: Option<(String, egui::Color32, Instant)>,
+    /// The status page, while switched on.
+    pub status_page: Option<pulse_net::status_page::StatusPage>,
+    /// What the status page shows (the open profile's monitor).
+    page_source: pulse_net::status_page::Source,
     ctx: egui::Context,
 }
 
@@ -172,8 +176,13 @@ impl App {
             sim: None,
             demo_events: true,
             notice: None,
+            status_page: None,
+            page_source: Arc::default(),
             ctx: ctx.clone(),
         };
+        if app.settings.status_page {
+            app.set_status_page(true);
+        }
         if let Some(p) = open {
             app.open(Some(p));
         }
@@ -199,6 +208,7 @@ impl App {
             opts.lan = false;
             opts.mdns = false;
             opts.artnet_port = 0;
+            opts.sacn_port = 0;
         }
         self.monitor = match Monitor::start(profile.clone(), opts) {
             Ok(m) => Some(m),
@@ -207,6 +217,7 @@ impl App {
                 None
             }
         };
+        self.sync_page_source();
         self.doc = Some(Doc {
             profile,
             path,
@@ -348,6 +359,50 @@ impl App {
         self.monitor = None;
         self.sim = None;
         self.doc = None;
+        self.sync_page_source();
+    }
+
+    /// The status page shows the monitor of the open profile.
+    fn sync_page_source(&self) {
+        if let Ok(mut s) = self.page_source.lock() {
+            *s = self.monitor.as_ref().map(|m| m.shared_handle());
+        }
+    }
+
+    /// Switch the status page on or off (and remember it). On this
+    /// computer's networks on TCP 7470; without LAN (tests) on 127.0.0.1.
+    pub fn set_status_page(&mut self, on: bool) {
+        if on && self.status_page.is_none() {
+            let (bind, port) = if self.lan {
+                (
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED),
+                    pulse_net::status_page::PORT,
+                )
+            } else {
+                (std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 0)
+            };
+            match pulse_net::status_page::StatusPage::start(
+                bind,
+                port,
+                self.page_source.clone(),
+                self.lan,
+            ) {
+                Ok(p) => self.status_page = Some(p),
+                Err(e) => {
+                    self.say(
+                        format!("Status page: cannot listen on TCP {port}: {e}"),
+                        theme::ERROR,
+                    );
+                    return;
+                }
+            }
+        } else if !on {
+            self.status_page = None;
+        }
+        if self.settings.status_page != on {
+            self.settings.status_page = on;
+            self.settings.save();
+        }
     }
 
     /// This computer's interfaces (re-read every few seconds).
@@ -360,6 +415,40 @@ impl App {
             self.nics = (pulse_net::interfaces::list(), Some(Instant::now()));
         }
         self.nics.0.clone()
+    }
+
+    /// Take over the devices of a Showtime exchange file (from Blueprint).
+    /// `None`: ask for the file.
+    pub fn import_exchange(&mut self, path: Option<PathBuf>) {
+        let path = match path {
+            Some(p) => p,
+            None => {
+                if !self.dialogs {
+                    return;
+                }
+                let mut d = rfd::FileDialog::new()
+                    .add_filter("Showtime exchange file", &["json"])
+                    .set_title("Import devices from Blueprint");
+                if let Some(dir) = &self.settings.last_dir {
+                    d = d.set_directory(dir);
+                }
+                match d.pick_file() {
+                    Some(p) => p,
+                    None => return,
+                }
+            }
+        };
+        let read = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|t| pulse_core::exchange::read(&t));
+        match read {
+            Ok(x) => {
+                let mut r = pulse_core::exchange::Imported::default();
+                self.edit(|p| r = p.import_exchange(&x));
+                self.say(format!("Blueprint: {}", r.summary()), theme::MUTED);
+            }
+            Err(e) => self.say(format!("Cannot import: {e}"), theme::ERROR),
+        }
     }
 
     /// Change the inventory: marks it unsaved and hands it to the monitor.
@@ -719,6 +808,21 @@ impl App {
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
         let now = now_ms();
+        let urls = match self.status_page.is_some() {
+            true if self.lan => {
+                let nics = self.nics();
+                self.status_page
+                    .as_ref()
+                    .map(|p| p.urls(&nics))
+                    .unwrap_or_default()
+            }
+            true => self
+                .status_page
+                .as_ref()
+                .map(|p| vec![format!("http://127.0.0.1:{}/", p.port)])
+                .unwrap_or_default(),
+            false => Vec::new(),
+        };
         ui.horizontal(|ui| {
             if let Some(m) = &self.monitor {
                 let (devices, running, load, counts) = m.with(|s| {
@@ -760,6 +864,29 @@ impl App {
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut on = self.status_page.is_some();
+                let hover = if on {
+                    if urls.is_empty() {
+                        "Status page on, but this computer has no network address right now.".to_string()
+                    } else {
+                        format!(
+                            "Read-only status page for phones and other computers:\n{}",
+                            urls.join("\n")
+                        )
+                    }
+                } else {
+                    "A read-only status page on TCP 7470 for phones and other computers of the crew. Nothing can be changed there.".to_string()
+                };
+                if ui
+                    .toggle_value(&mut on, RichText::new("Status page").small())
+                    .on_hover_text(hover)
+                    .changed()
+                {
+                    self.set_status_page(on);
+                }
+                if let Some(u) = urls.first() {
+                    ui.label(RichText::new(u).small().monospace().color(theme::MUTED));
+                }
                 if let Some((text, color, at)) = &self.notice {
                     if at.elapsed() < Duration::from_secs(6) {
                         ui.label(RichText::new(text).small().color(*color));

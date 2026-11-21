@@ -53,6 +53,8 @@ pub struct Options {
     pub method: Option<Method>,
     /// The Art-Net port to listen on (6454; tests use another).
     pub artnet_port: u16,
+    /// The sACN port to listen on (5568; tests use another).
+    pub sacn_port: u16,
     /// More ArtPoll targets than the broadcasts (tests, the simulator).
     pub artnet_targets: Vec<SocketAddr>,
     /// More console query targets than the broadcasts (tests, the simulator).
@@ -72,6 +74,7 @@ impl Default for Options {
             on_change: None,
             method: None,
             artnet_port: pulse_core::artnet::PORT,
+            sacn_port: pulse_core::sacn::PORT,
             artnet_targets: Vec::new(),
             console_targets: Vec::new(),
             mdns: true,
@@ -191,6 +194,11 @@ impl Monitor {
                 rt.shutdown_timeout(Duration::from_millis(200));
             })?;
         Ok(Monitor { shared, found, tx })
+    }
+
+    /// The shared state itself (the status page reads it).
+    pub fn shared_handle(&self) -> Arc<Mutex<Shared>> {
+        self.shared.clone()
     }
 
     /// Read the current state (briefly locked).
@@ -351,6 +359,8 @@ struct Wants {
     artnet: bool,
     poll: bool,
     mdns: BTreeSet<String>,
+    /// sACN universes to listen to.
+    sacn: BTreeSet<u16>,
 }
 
 fn wants(p: &Profile, discovering: bool) -> Wants {
@@ -358,6 +368,7 @@ fn wants(p: &Profile, discovering: bool) -> Wants {
         artnet: discovering,
         poll: discovering,
         mdns: BTreeSet::new(),
+        sacn: BTreeSet::new(),
     };
     if discovering {
         w.mdns
@@ -371,6 +382,9 @@ fn wants(p: &Profile, discovering: bool) -> Wants {
                     w.poll = true;
                 }
                 CheckKind::ArtNetUniverse { .. } => w.artnet = true,
+                CheckKind::SacnUniverse { universe, .. } => {
+                    w.sacn.insert(*universe);
+                }
                 CheckKind::Mdns { service, .. } if !service.trim().is_empty() => {
                     w.mdns
                         .insert(pulse_core::model::service_short(service).to_string());
@@ -390,6 +404,8 @@ struct Listeners {
     registry: Registry,
     artnet: Option<tokio::task::JoinHandle<()>>,
     poll: Arc<AtomicBool>,
+    sacn: Option<tokio::task::JoinHandle<()>>,
+    sacn_universes: Arc<Mutex<BTreeSet<u16>>>,
     sweep: Option<tokio::task::JoinHandle<()>>,
     discovering: bool,
     /// Packets sent by listeners and discovery (added to the load).
@@ -416,6 +432,22 @@ impl Listeners {
                 found::lock(found).artnet_state = found::Listener::Off;
             }
         }
+        if let Ok(mut u) = self.sacn_universes.lock() {
+            *u = w.sacn.clone();
+        }
+        if !w.sacn.is_empty() && self.sacn.is_none() {
+            self.sacn = Some(tokio::spawn(crate::sacn::listen(
+                found.clone(),
+                opts.sacn_port,
+                self.sacn_universes.clone(),
+                opts.lan,
+            )));
+        } else if w.sacn.is_empty() {
+            if let Some(h) = self.sacn.take() {
+                h.abort();
+                found::lock(found).sacn_state = found::Listener::Off;
+            }
+        }
         if opts.mdns {
             self.registry.set_types(found, &w.mdns);
         }
@@ -434,6 +466,9 @@ impl Listeners {
 impl Drop for Listeners {
     fn drop(&mut self) {
         if let Some(h) = self.artnet.take() {
+            h.abort();
+        }
+        if let Some(h) = self.sacn.take() {
             h.abort();
         }
         if let Some(h) = self.sweep.take() {
@@ -456,6 +491,8 @@ async fn run(
         registry: Registry::new(),
         artnet: None,
         poll: Arc::new(AtomicBool::new(false)),
+        sacn: None,
+        sacn_universes: Arc::default(),
         sweep: None,
         discovering: false,
         sent: Arc::new(AtomicU64::new(0)),

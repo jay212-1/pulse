@@ -130,6 +130,31 @@ pub enum CheckKind {
     Ndi { source: String },
     /// A network interface of this computer is up and has an address.
     Interface { name: String },
+    /// sACN (E1.31) frames of a universe arrive, at least `min_fps` per second.
+    SacnUniverse { universe: u16, min_fps: f64 },
+    /// A managed switch answers SNMP v2c (read-only); with `if_index` > 0
+    /// also that port is up and gets no new errors.
+    Snmp {
+        community: String,
+        #[serde(default)]
+        if_index: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+    },
+    /// Pulse Agent on a show computer answers: CPU, memory, disk, and the
+    /// named programs run.
+    Agent {
+        #[serde(default)]
+        processes: Vec<String>,
+        #[serde(default = "default_min_free_gb")]
+        min_free_gb: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<u16>,
+    },
+}
+
+fn default_min_free_gb() -> f64 {
+    5.0
 }
 
 impl CheckKind {
@@ -144,13 +169,17 @@ impl CheckKind {
             CheckKind::Ndi { source } if source.is_empty() => "NDI source".into(),
             CheckKind::Ndi { source } => format!("NDI {source}"),
             CheckKind::Interface { name } => format!("Interface {name}"),
+            CheckKind::SacnUniverse { universe, .. } => format!("sACN {universe}"),
+            CheckKind::Snmp { if_index: 0, .. } => "SNMP".into(),
+            CheckKind::Snmp { if_index, .. } => format!("SNMP port {if_index}"),
+            CheckKind::Agent { .. } => "Agent".into(),
         }
     }
     /// Seconds between two runs in monitoring.
     pub fn default_interval(&self) -> f64 {
         match self {
             CheckKind::Ping => 2.0,
-            CheckKind::ArtNetUniverse { .. } => 1.0,
+            CheckKind::ArtNetUniverse { .. } | CheckKind::SacnUniverse { .. } => 1.0,
             CheckKind::Interface { .. } => 2.0,
             _ => 5.0,
         }
@@ -167,6 +196,7 @@ impl CheckKind {
             self,
             CheckKind::ArtNetNode
                 | CheckKind::ArtNetUniverse { .. }
+                | CheckKind::SacnUniverse { .. }
                 | CheckKind::Mdns { .. }
                 | CheckKind::Interface { .. }
         )
@@ -195,6 +225,20 @@ impl CheckKind {
             CheckKind::Interface {
                 name: String::new(),
             },
+            CheckKind::SacnUniverse {
+                universe: 1,
+                min_fps: 20.0,
+            },
+            CheckKind::Snmp {
+                community: "public".into(),
+                if_index: 0,
+                port: None,
+            },
+            CheckKind::Agent {
+                processes: Vec::new(),
+                min_free_gb: 5.0,
+                port: None,
+            },
         ]
     }
     /// A short name of the kind, without its settings ("TCP port").
@@ -208,6 +252,9 @@ impl CheckKind {
             CheckKind::Mdns { .. } => "mDNS service",
             CheckKind::Ndi { .. } => "NDI source",
             CheckKind::Interface { .. } => "Interface",
+            CheckKind::SacnUniverse { .. } => "sACN universe",
+            CheckKind::Snmp { .. } => "SNMP switch",
+            CheckKind::Agent { .. } => "Pulse Agent",
         }
     }
 }

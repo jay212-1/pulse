@@ -81,7 +81,33 @@ pub fn make(device: &Device, check: &Check) -> Box<dyn Probe> {
         CheckKind::ArtNetUniverse { universe, min_fps } => Box::new(UniverseProbe {
             universe: *universe,
             min_fps: *min_fps,
+            sacn: false,
         }),
+        CheckKind::SacnUniverse { universe, min_fps } => Box::new(UniverseProbe {
+            universe: *universe,
+            min_fps: *min_fps,
+            sacn: true,
+        }),
+        CheckKind::Snmp {
+            community,
+            if_index,
+            port,
+        } => Box::new(crate::snmp::SnmpProbe::new(
+            target,
+            community,
+            *if_index,
+            port.unwrap_or(pulse_core::snmp::PORT),
+        )),
+        CheckKind::Agent {
+            processes,
+            min_free_gb,
+            port,
+        } => Box::new(crate::agent::AgentProbe::new(
+            target,
+            processes.clone(),
+            *min_free_gb,
+            port.unwrap_or(pulse_core::agent::PORT),
+        )),
         CheckKind::Mdns { service, instance } => Box::new(MdnsProbe {
             target,
             service: service_short(service).to_string(),
@@ -102,7 +128,7 @@ pub fn make(device: &Device, check: &Check) -> Box<dyn Probe> {
 }
 
 /// An address or host name, resolved now and then (names may move).
-struct Target {
+pub(crate) struct Target {
     host: String,
     resolved: Option<(IpAddr, Instant)>,
 }
@@ -111,13 +137,13 @@ struct Target {
 const RESOLVE_TTL: Duration = Duration::from_secs(60);
 
 impl Target {
-    fn new(host: &str) -> Self {
+    pub(crate) fn new(host: &str) -> Self {
         let host = host.trim().to_string();
         let resolved = host.parse::<IpAddr>().ok().map(|ip| (ip, Instant::now()));
         Target { host, resolved }
     }
 
-    async fn ip(&mut self, timeout: Duration) -> Result<IpAddr, String> {
+    pub(crate) async fn ip(&mut self, timeout: Duration) -> Result<IpAddr, String> {
         if let Ok(ip) = self.host.parse::<IpAddr>() {
             return Ok(ip);
         }
@@ -346,14 +372,14 @@ impl Probe for TcpProbe {
 }
 
 /// A result that says nothing about the device (the check could not look).
-fn unknown(depth: Depth, msg: impl Into<String>, via: &str) -> ProbeResult {
+pub(crate) fn unknown(depth: Depth, msg: impl Into<String>, via: &str) -> ProbeResult {
     let mut r = ProbeResult::new(Outcome::Unknown, depth, msg);
     r.via = via.into();
     r
 }
 
 /// The device's IPv4 address, or a result saying why there is none.
-async fn ipv4(
+pub(crate) async fn ipv4(
     target: &mut Target,
     ctx: &Ctx,
     depth: Depth,
@@ -548,6 +574,8 @@ impl Probe for ArtNetNodeProbe {
 struct UniverseProbe {
     universe: u16,
     min_fps: f64,
+    /// sACN instead of Art-Net.
+    sacn: bool,
 }
 
 impl Probe for UniverseProbe {
@@ -557,25 +585,75 @@ impl Probe for UniverseProbe {
 
     fn run<'a>(&'a mut self, ctx: &'a Ctx) -> BoxFut<'a, ProbeResult> {
         Box::pin(async move {
-            let via = "Art-Net";
+            let via = if self.sacn { "sACN" } else { "Art-Net" };
             let now = now_ms();
             let f = lock(&ctx.found);
-            let u = f.artnet.universes.get(&self.universe).cloned();
-            let gap = listener_gap(&f.artnet_state, "Art-Net", now, 2500);
+            let (u, gap, top) = if self.sacn {
+                let (prio, top) = f.sacn.top(self.universe, now);
+                (
+                    f.sacn.universes.get(&self.universe).cloned(),
+                    listener_gap(&f.sacn_state, via, now, 2500),
+                    Some((prio, top)),
+                )
+            } else {
+                (
+                    f.artnet.universes.get(&self.universe).cloned(),
+                    listener_gap(&f.artnet_state, via, now, 2500),
+                    None,
+                )
+            };
             drop(f);
-            let label = universe_label(self.universe);
+            let label = if self.sacn {
+                self.universe.to_string()
+            } else {
+                universe_label(self.universe)
+            };
             let mut r = match (u, gap) {
                 (Some(u), _) if u.last.is_some_and(|t| t + SOURCE_TTL_MS >= now) => {
                     let fps = u.fps(now);
-                    let senders = u.senders(now);
-                    let from: Vec<String> = senders.iter().map(|s| s.to_string()).collect();
-                    let mut r = if senders.len() > 1 {
+                    // sACN: only the sources at the highest priority count (a
+                    // backup at a lower priority is no conflict).
+                    let from: Vec<String> = match &top {
+                        Some((_, top)) => top
+                            .iter()
+                            .map(|(ip, s)| {
+                                if s.name.is_empty() {
+                                    ip.to_string()
+                                } else {
+                                    format!("\"{}\" ({ip})", s.name)
+                                }
+                            })
+                            .collect(),
+                        None => u.senders(now).iter().map(|s| s.to_string()).collect(),
+                    };
+                    let backups = match &top {
+                        Some((prio, _)) => {
+                            let all = u.senders(now).len();
+                            let n = all.saturating_sub(from.len());
+                            if n > 0 {
+                                format!(" at priority {prio}, {n} backup(s) at a lower one")
+                            } else {
+                                format!(" at priority {prio}")
+                            }
+                        }
+                        None => String::new(),
+                    };
+                    let mut r = if from.len() > 1 {
                         ProbeResult::new(
                             Outcome::Degraded,
                             Depth::Data,
                             format!(
                                 "conflict: universe {label} is sent by {}",
                                 from.join(" and ")
+                            ),
+                        )
+                    } else if fps < self.min_fps && u.measuring(now) {
+                        ProbeResult::new(
+                            Outcome::Ok,
+                            Depth::Data,
+                            format!(
+                                "frames arrive from {}{backups} (measuring the rate)",
+                                from.join(", ")
                             ),
                         )
                     } else if fps < self.min_fps {
@@ -591,7 +669,10 @@ impl Probe for UniverseProbe {
                         ProbeResult::new(
                             Outcome::Ok,
                             Depth::Data,
-                            format!("{fps:.0} frames per second from {}", from.join(", ")),
+                            format!(
+                                "{fps:.0} frames per second from {}{backups}",
+                                from.join(", ")
+                            ),
                         )
                     };
                     r.metrics.push((Metric::Fps, fps));

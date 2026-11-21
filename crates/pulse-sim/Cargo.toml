@@ -13,5 +13,8 @@ pulse-net.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+serde_json.workspace = true
+
 [lints]
 workspace = true

@@ -9,10 +9,12 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod agent;
 pub mod artnet;
 pub mod console;
 pub mod discovery;
 pub mod found;
+pub mod http;
 pub mod icmp;
 #[cfg(windows)]
 mod icmp_windows;
@@ -20,6 +22,9 @@ pub mod interfaces;
 pub mod mdns;
 pub mod monitor;
 pub mod probe;
+pub mod sacn;
+pub mod snmp;
+pub mod status_page;
 pub mod tools;
 pub mod udp;
 

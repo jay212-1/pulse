@@ -15,6 +15,8 @@ pub struct Settings {
     pub last_dir: Option<PathBuf>,
     /// Alert sound in show mode (off by default).
     pub sound: bool,
+    /// The read-only status page on TCP 7470 (off by default).
+    pub status_page: bool,
 }
 
 /// The settings folder.
