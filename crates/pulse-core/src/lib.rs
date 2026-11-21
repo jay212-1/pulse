@@ -9,16 +9,21 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod artnet;
 pub mod demo;
+pub mod discovery;
 pub mod events;
 pub mod history;
 pub mod model;
+pub mod osc;
 pub mod ping;
+pub mod presets;
 pub mod probe;
 pub mod profile;
 pub mod status;
 
 pub use events::{Event, EventKind, EventLog};
-pub use model::{Check, CheckKind, Criticality, Device, DeviceKind, Id, Profile};
+pub use model::{Check, CheckKind, ConsoleModel, Criticality, Device, DeviceKind, Id, Profile};
+pub use presets::Preset;
 pub use probe::{Depth, Metric, Outcome, ProbeResult};
 pub use status::{Engine, Ms, Overview, Status};

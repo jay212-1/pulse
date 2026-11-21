@@ -46,16 +46,21 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   JSON, `schema_version`, migrations, atomic save), `probe.rs` (the result format every probe
   returns, with its check depth), `ping.rs` (rolling window and how it is judged), `status.rs`
   (status engine: hysteresis, flapping, acknowledgements, area and overall lights, reasons),
-  `events.rs` (event log, filter, CSV), `history.rs` (series for the graphs).
+  `events.rs` (event log, filter, CSV), `history.rs` (series for the graphs), `artnet.rs`
+  (ArtPoll/ArtPollReply/ArtDmx, frames per universe), `osc.rs` (minimal OSC codec),
+  `presets.rs` (device presets), `discovery.rs` (sightings -> new / known / missing devices).
 - `crates/pulse-net` – the network side, read-only: `icmp.rs` (ping without admin rights:
   ICMP datagram sockets on macOS/Linux, `icmp_windows.rs` with `IcmpSendEcho` – the only
   `unsafe` code –, TCP fallback), `probe.rs` (the `Probe` trait and the probes), `monitor.rs`
   (scheduler on its own tokio runtime: spread-out intervals, packet limit, hard timeout per run,
-  shared snapshot for the window). `examples/watch.rs` watches addresses from the terminal.
+  shared snapshot for the window, starts the listeners only when needed), `found.rs` (what the
+  listeners found), `artnet.rs` (listener on UDP 6454), `mdns.rs` (mDNS registry, `mdns-sd`),
+  `console.rs` (X32/X Air/Wing queries), `interfaces.rs`, `udp.rs`, `discovery.rs` (console
+  broadcast, ping sweep). `examples/watch.rs` watches addresses from the terminal.
 - `crates/pulse` – the egui app: `app.rs` (window, profile file, pages, navigation, status bar),
   `app_start.rs` (start screen, new-profile form, backdrop), `app_monitor.rs` (overall light,
   tiles), `app_detail.rs` (detail panel), `app_inventory.rs` (inventory editor),
-  `app_log.rs` (event log, CSV), `theme.rs` (suite colours, drawn status symbols),
+  `app_log.rs` (event log, CSV), `app_discovery.rs` (auto discovery), `theme.rs` (suite colours, drawn status symbols),
   `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
 - `install-mac.sh`, `packaging/macos/` – as in Blueprint.
 - `scripts/setup.sh` and `scripts/ui.sh` are identical copies of the files in the other suite
@@ -75,4 +80,7 @@ cargo run -p pulse-net --example watch -- 127.0.0.1 192.0.2.1
   Every probe has a timeout; nothing may block the window.
 - No `unwrap()` / `expect()` / `panic!` outside tests.
 - UI texts are English. Only glyphs of egui's default fonts in UI strings.
-- Tests never touch the real settings or the real Documents folder.
+- Tests never touch the real settings or the real Documents folder. UI tests set `app.lan =
+  false` (no mDNS, no broadcasts); network tests use fake devices on loopback.
+- Broadcasts and the ping sweep only while the discovery page is open or after the user
+  confirmed them.

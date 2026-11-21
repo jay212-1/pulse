@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+- Protocol checks (phase 4): console queries (Behringer X32/M32 and X Air via OSC `/xinfo`, Wing
+  via its discovery answer; name, model and firmware, nothing is changed on the desk),
+  Art-Net nodes (ArtPoll every 3 s, only while needed, answered by ArtPollReply), Art-Net
+  universes (frames per second, last frame, who sends, a warning when two senders collide or
+  the frame rate drops), mDNS services (Dante, Lantern or any type), NDI sources (announced via
+  `_ndi._tcp` and their port open; no NDI SDK needed), and network interfaces of this computer.
+- Devices can name the interface to check from; if it is down, their checks say so (unknown,
+  not red) instead of blaming the device.
+- Presets: X32/M32, X Air, Wing, other consoles (basic checks), Dante device, NDI source,
+  Art-Net node, lighting desk, tablet on Wi-Fi, Show Master, Lantern, switch, access point.
+- Auto discovery: a new page lists what announces itself or answers (mDNS, NDI, Dante,
+  Art-Net nodes, consoles) and, after you confirm it, a gentle ping sweep of one subnet
+  (20 addresses per second). New devices are added with one click (or all at once) with the
+  preset that suits them; devices already in the inventory and expected devices nobody saw are
+  listed too. The navigation shows how many new devices were found.
+- Inventory: "Add from preset", "Add check" with every kind of check and their settings, an
+  interface chooser.
+
 ## 0.2.0
 
 - The window (phase 3), in the suite's look: a start screen with new profile, open, recent

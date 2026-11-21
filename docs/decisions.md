@@ -20,3 +20,12 @@
 - 2026-11-21: Ampel-Gelb ist die Suite-Farbe `WARN` aus Blueprint (`#facc15`), nicht das Amber aus Show Master: Es soll als „Gelb“ lesbar sein.
 - 2026-11-21: Das Icon wurde aus `assets/icon.svg` mit resvg gerendert (PNG 1024, ICO), weil Playwright auf diesem Mac fehlt. Das Ergebnis entspricht `render-icon.mjs`.
 - 2026-11-21: `install-mac.sh` und `build-dmg.sh` kommen schon in Phase 3, damit Pulse aus dem Launcher installiert werden kann. Der Rest der Skripte folgt in Phase 8.
+- 2026-11-21: Neue Prüfarten als neue `CheckKind`-Varianten (Console, ArtNetNode, ArtNetUniverse, Mdns, Ndi, Interface). Alte Profile bleiben gültig, `schema_version` bleibt 1.
+- 2026-11-21: Konsolen: X32/M32 per OSC `/xinfo` auf UDP 10023, X Air auf 10024, Wing per „WING?“ auf UDP 2222. Unbekannte Pulte bekommen nur Ping (Preset „Other console“).
+- 2026-11-21: Art-Net-Listener auf UDP 6454 mit SO_REUSEADDR/SO_REUSEPORT (Lichtsoftware auf demselben Rechner darf den Port weiter nutzen). Er läuft nur, wenn eine Art-Net-Prüfung aktiv oder die Discovery-Seite offen ist. ArtPoll alle 3 s an die gerichteten Broadcasts aller Interfaces, ebenfalls nur bei Bedarf.
+- 2026-11-21: Universum-Prüfung: Rot ohne Frames seit 3 s, Gelb unter der Mindest-Framerate (Standard 20 fps) oder bei mehr als einem Sender (Konflikt).
+- 2026-11-21: mDNS-Typen werden nur durchsucht, solange eine Prüfung oder die Discovery-Seite sie braucht. Pulse kündigt selbst nichts an.
+- 2026-11-21: Passive Prüfungen (Art-Net, mDNS, Interface) senden nichts und kosten 0 Pakete; in den ersten Sekunden nach dem Start des Listeners melden sie „unbekannt“ statt rot.
+- 2026-11-21: Bindung an `Device.interface`: Probes senden von der Adresse des Interfaces. Fehlt das Interface, ist das Ergebnis „unbekannt“ mit Begründung, nicht rot (das Gerät ist nicht schuld). Unter Windows wählt das System das Interface für Ping selbst.
+- 2026-11-21: Auto-Discovery wie im Prompt: mDNS (Dante, NDI, Lantern, HTTP/Show Master), ArtPollReply, Konsolen-Broadcast (alle 10 s, solange die Seite offen ist) und ein Ping-Sweep nur nach ausdrücklicher Bestätigung (20 Adressen/s, höchstens ein /24). Neue Geräte werden mit passendem Preset per Klick übernommen. „Erwartet, nicht gesehen“: Geräte mit Discovery-fähiger Prüfung, die niemand gesehen hat, nach einem Sweep auch reine Ping-Geräte im Netz des Sweeps.
+- 2026-11-21: Zuordnung gefundener Geräte zum Inventar über die IPv4-Adresse oder den mDNS-Hostnamen.

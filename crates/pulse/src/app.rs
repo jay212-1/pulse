@@ -1,6 +1,7 @@
 //! The window: the open profile, its monitor, the pages (monitor,
 //! inventory, event log), the File menu, the navigation and the status bar.
 
+use crate::app_discovery::DiscoveryState;
 use crate::app_inventory::InventoryState;
 use crate::app_start::StartState;
 use crate::settings::Settings;
@@ -22,6 +23,7 @@ const SAVE_AFTER: Duration = Duration::from_millis(800);
 pub enum Page {
     Monitor,
     Inventory,
+    Discovery,
     Log,
 }
 
@@ -86,10 +88,17 @@ pub struct App {
     pub log_filter: Filter,
     pub start: StartState,
     pub inventory: InventoryState,
+    pub discovery: DiscoveryState,
+    /// The monitor was told the discovery page is open.
+    discovering: bool,
+    /// This computer's interfaces (refreshed now and then).
+    nics: (Vec<pulse_net::Nic>, Option<Instant>),
     /// Note typed for an acknowledgement.
     pub ack_note: String,
     /// File dialogs (off in tests).
     pub dialogs: bool,
+    /// Discovery on this computer's networks (mDNS, broadcasts; off in tests).
+    pub lan: bool,
     /// A short message in the status bar: text, colour, when.
     pub notice: Option<(String, egui::Color32, Instant)>,
     ctx: egui::Context,
@@ -108,8 +117,12 @@ impl App {
             log_filter: Filter::default(),
             start: StartState::default(),
             inventory: InventoryState::default(),
+            discovery: DiscoveryState::default(),
+            discovering: false,
+            nics: (Vec::new(), None),
             ack_note: String::new(),
             dialogs: true,
+            lan: true,
             notice: None,
             ctx: ctx.clone(),
         };
@@ -124,11 +137,17 @@ impl App {
     /// Watch `profile` (stops the previous monitor).
     pub fn start_document(&mut self, profile: Profile, path: Option<PathBuf>) {
         self.monitor = None;
+        self.discovering = false;
         let ctx = self.ctx.clone();
-        let opts = Options {
+        let mut opts = Options {
             on_change: Some(Arc::new(move || ctx.request_repaint())),
             ..Options::default()
         };
+        if !self.lan {
+            opts.lan = false;
+            opts.mdns = false;
+            opts.artnet_port = 0;
+        }
         self.monitor = match Monitor::start(profile.clone(), opts) {
             Ok(m) => Some(m),
             Err(e) => {
@@ -261,6 +280,18 @@ impl App {
         self.doc = None;
     }
 
+    /// This computer's interfaces (re-read every few seconds).
+    pub fn nics(&mut self) -> Vec<pulse_net::Nic> {
+        if self
+            .nics
+            .1
+            .is_none_or(|t| t.elapsed() > Duration::from_secs(3))
+        {
+            self.nics = (pulse_net::interfaces::list(), Some(Instant::now()));
+        }
+        self.nics.0.clone()
+    }
+
     /// Change the inventory: marks it unsaved and hands it to the monitor.
     pub fn edit(&mut self, f: impl FnOnce(&mut Profile)) {
         let Some(doc) = &mut self.doc else { return };
@@ -335,6 +366,14 @@ impl App {
         {
             ctx.request_repaint_after(SAVE_AFTER);
         }
+        // The monitor listens to everything while the discovery page is open.
+        let want = self.page == Page::Discovery && self.doc.is_some();
+        if want != self.discovering {
+            if let Some(m) = &self.monitor {
+                m.set_discovery(want);
+            }
+            self.discovering = want;
+        }
         if self.doc.is_some() {
             // "seen 3 s ago" keeps counting.
             ctx.request_repaint_after(Duration::from_secs(1));
@@ -403,6 +442,7 @@ impl App {
             .show(ui, |ui| match self.page {
                 Page::Monitor => self.monitor_page(ui),
                 Page::Inventory => self.inventory_page(ui),
+                Page::Discovery => self.discovery_page(ui),
                 Page::Log => self.log_page(ui),
             });
     }
@@ -529,6 +569,19 @@ impl App {
             &format!("Inventory  ({devices})"),
         ) {
             self.page = Page::Inventory;
+        }
+        let new = self.discovered_new();
+        if nav_item(
+            ui,
+            self.page == Page::Discovery,
+            None,
+            &if new > 0 {
+                format!("Discovery  ({new} new)")
+            } else {
+                "Discovery".to_string()
+            },
+        ) {
+            self.page = Page::Discovery;
         }
         if nav_item(
             ui,

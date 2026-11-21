@@ -65,19 +65,27 @@ fn probe_permission() -> Result<(), String> {
 }
 
 /// One echo request; blocks up to `timeout`. `Ok(Some(ms))` = answer,
-/// `Ok(None)` = no answer in time, `Err` = could not be sent.
-pub fn echo(addr: Ipv4Addr, seq: u16, timeout: Duration) -> std::io::Result<Option<f64>> {
+/// `Ok(None)` = no answer in time, `Err` = could not be sent. `source`: the
+/// address to send from (the device's interface); on Windows the system
+/// picks the interface by its routes.
+pub fn echo(
+    addr: Ipv4Addr,
+    source: Option<Ipv4Addr>,
+    seq: u16,
+    timeout: Duration,
+) -> std::io::Result<Option<f64>> {
     #[cfg(unix)]
     {
-        unix::echo(addr, seq, timeout)
+        unix::echo(addr, source, seq, timeout)
     }
     #[cfg(windows)]
     {
+        let _ = source;
         crate::icmp_windows::echo(addr, seq, timeout)
     }
     #[cfg(not(any(unix, windows)))]
     {
-        let _ = (addr, seq, timeout);
+        let _ = (addr, source, seq, timeout);
         Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             "no ICMP",
@@ -159,8 +167,16 @@ mod unix {
         Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4))
     }
 
-    pub fn echo(addr: Ipv4Addr, seq: u16, timeout: Duration) -> std::io::Result<Option<f64>> {
+    pub fn echo(
+        addr: Ipv4Addr,
+        source: Option<Ipv4Addr>,
+        seq: u16,
+        timeout: Duration,
+    ) -> std::io::Result<Option<f64>> {
         let mut sock = open()?;
+        if let Some(src) = source {
+            sock.bind(&SockAddr::from(SocketAddrV4::new(src, 0)))?;
+        }
         let payload = token();
         let packet = request(std::process::id() as u16, seq, &payload);
         let to = SockAddr::from(SocketAddrV4::new(addr, 0));

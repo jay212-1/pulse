@@ -111,6 +111,20 @@ pub enum CheckKind {
     Ping,
     /// Can a TCP connection to the port be opened (and is closed again at once)?
     Tcp { port: u16 },
+    /// Ask a mixing console who it is (OSC `/xinfo`, Wing discovery).
+    Console { model: ConsoleModel },
+    /// The device answers ArtPoll with an ArtPollReply.
+    ArtNetNode,
+    /// DMX frames of a universe arrive, at least `min_fps` per second.
+    ArtNetUniverse { universe: u16, min_fps: f64 },
+    /// The device announces an mDNS service (`_netaudio-arc._udp` for Dante).
+    /// An empty instance matches any instance at the device's address.
+    Mdns { service: String, instance: String },
+    /// An NDI source is announced and its port accepts connections. An empty
+    /// source matches any source at the device's address.
+    Ndi { source: String },
+    /// A network interface of this computer is up and has an address.
+    Interface { name: String },
 }
 
 impl CheckKind {
@@ -118,19 +132,123 @@ impl CheckKind {
         match self {
             CheckKind::Ping => "Ping".into(),
             CheckKind::Tcp { port } => format!("TCP {port}"),
+            CheckKind::Console { model } => format!("{} query", model.label()),
+            CheckKind::ArtNetNode => "Art-Net node".into(),
+            CheckKind::ArtNetUniverse { universe, .. } => format!("Universe {universe}"),
+            CheckKind::Mdns { service, .. } => format!("mDNS {}", service_short(service)),
+            CheckKind::Ndi { source } if source.is_empty() => "NDI source".into(),
+            CheckKind::Ndi { source } => format!("NDI {source}"),
+            CheckKind::Interface { name } => format!("Interface {name}"),
         }
     }
     /// Seconds between two runs in monitoring.
     pub fn default_interval(&self) -> f64 {
         match self {
             CheckKind::Ping => 2.0,
-            CheckKind::Tcp { .. } => 5.0,
+            CheckKind::ArtNetUniverse { .. } => 1.0,
+            CheckKind::Interface { .. } => 2.0,
+            _ => 5.0,
         }
     }
     pub fn default_timeout_ms(&self) -> u32 {
         match self {
             CheckKind::Ping => 1000,
-            CheckKind::Tcp { .. } => 1500,
+            _ => 1500,
+        }
+    }
+    /// The check reads what the listeners found (it sends nothing itself).
+    pub fn passive(&self) -> bool {
+        matches!(
+            self,
+            CheckKind::ArtNetNode
+                | CheckKind::ArtNetUniverse { .. }
+                | CheckKind::Mdns { .. }
+                | CheckKind::Interface { .. }
+        )
+    }
+    /// Other kinds a new check of a device can be (for the inventory).
+    pub fn templates() -> Vec<CheckKind> {
+        vec![
+            CheckKind::Ping,
+            CheckKind::Tcp { port: 80 },
+            CheckKind::Console {
+                model: ConsoleModel::X32,
+            },
+            CheckKind::ArtNetNode,
+            CheckKind::ArtNetUniverse {
+                universe: 0,
+                min_fps: 20.0,
+            },
+            CheckKind::Mdns {
+                service: DANTE_SERVICE.into(),
+                instance: String::new(),
+            },
+            CheckKind::Ndi {
+                source: String::new(),
+            },
+            CheckKind::Interface {
+                name: String::new(),
+            },
+        ]
+    }
+    /// A short name of the kind, without its settings ("TCP port").
+    pub fn kind_label(&self) -> &'static str {
+        match self {
+            CheckKind::Ping => "Ping",
+            CheckKind::Tcp { .. } => "TCP port",
+            CheckKind::Console { .. } => "Console query",
+            CheckKind::ArtNetNode => "Art-Net node",
+            CheckKind::ArtNetUniverse { .. } => "Art-Net universe",
+            CheckKind::Mdns { .. } => "mDNS service",
+            CheckKind::Ndi { .. } => "NDI source",
+            CheckKind::Interface { .. } => "Interface",
+        }
+    }
+}
+
+/// mDNS service of Dante devices.
+pub const DANTE_SERVICE: &str = "_netaudio-arc._udp";
+/// mDNS service of NDI sources.
+pub const NDI_SERVICE: &str = "_ndi._tcp";
+/// mDNS service of Lantern.
+pub const LANTERN_SERVICE: &str = "_lantern._udp";
+/// mDNS service of web servers (Show Master announces itself so).
+pub const HTTP_SERVICE: &str = "_http._tcp";
+
+/// "_netaudio-arc._udp.local." -> "_netaudio-arc._udp".
+pub fn service_short(s: &str) -> &str {
+    let s = s.trim().trim_end_matches('.');
+    s.strip_suffix(".local").unwrap_or(s)
+}
+
+/// Consoles Pulse can ask who they are. Others get the basic checks.
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default,
+)]
+pub enum ConsoleModel {
+    /// Behringer X32 and Midas M32: OSC `/xinfo` on UDP 10023.
+    #[default]
+    X32,
+    /// Behringer X Air and Midas MR: OSC `/xinfo` on UDP 10024.
+    XAir,
+    /// Behringer Wing: "WING?" on UDP 2222.
+    Wing,
+}
+
+impl ConsoleModel {
+    pub const ALL: [ConsoleModel; 3] = [ConsoleModel::X32, ConsoleModel::XAir, ConsoleModel::Wing];
+    pub fn label(self) -> &'static str {
+        match self {
+            ConsoleModel::X32 => "X32/M32",
+            ConsoleModel::XAir => "X Air",
+            ConsoleModel::Wing => "Wing",
+        }
+    }
+    pub fn port(self) -> u16 {
+        match self {
+            ConsoleModel::X32 => 10023,
+            ConsoleModel::XAir => 10024,
+            ConsoleModel::Wing => 2222,
         }
     }
 }

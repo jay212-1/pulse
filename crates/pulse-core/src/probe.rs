@@ -27,6 +27,8 @@ pub enum Depth {
     Answers,
     /// Data is flowing (DMX frames arrive, the process runs).
     Data,
+    /// A network interface of this computer is up.
+    Link,
 }
 
 impl Depth {
@@ -37,6 +39,7 @@ impl Depth {
             Depth::Present => "Present",
             Depth::Answers => "Answers",
             Depth::Data => "Data",
+            Depth::Link => "Link",
         }
     }
     /// What a pass at this depth proves, said plainly.
@@ -53,6 +56,7 @@ impl Depth {
             }
             Depth::Answers => "The device answers a protocol query.",
             Depth::Data => "Data is arriving.",
+            Depth::Link => "This computer's network interface is up and has an address.",
         }
     }
 }
@@ -67,6 +71,10 @@ pub enum Metric {
     LossPct,
     /// Time to open a TCP connection, ms.
     ConnectMs,
+    /// DMX frames per second.
+    Fps,
+    /// Time until a protocol answer arrived, ms.
+    AnswerMs,
 }
 
 impl Metric {
@@ -76,11 +84,14 @@ impl Metric {
             Metric::JitterMs => "Jitter",
             Metric::LossPct => "Loss",
             Metric::ConnectMs => "Connect",
+            Metric::Fps => "Frame rate",
+            Metric::AnswerMs => "Answer",
         }
     }
     pub fn format(self, v: f64) -> String {
         match self {
             Metric::LossPct => format!("{v:.0} %"),
+            Metric::Fps => format!("{v:.0} fps"),
             _ if v < 10.0 => format!("{v:.1} ms"),
             _ => format!("{v:.0} ms"),
         }

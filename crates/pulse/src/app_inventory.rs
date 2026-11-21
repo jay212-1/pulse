@@ -5,8 +5,12 @@
 use crate::app::App;
 use crate::theme;
 use egui::{vec2, RichText, Sense};
-use pulse_core::model::{Check, CheckKind, Criticality, Device, DeviceKind, Id, Profile, AREAS};
+use pulse_core::model::{
+    Check, CheckKind, ConsoleModel, Criticality, Device, DeviceKind, Id, Profile, AREAS,
+};
+use pulse_core::Preset;
 use pulse_core::Status;
+use pulse_net::Nic;
 use std::collections::BTreeSet;
 
 #[derive(Default)]
@@ -101,6 +105,18 @@ impl App {
     fn inventory_toolbar(&mut self, ui: &mut egui::Ui, profile: &Profile) {
         let sel: Vec<Id> = self.inventory.selection.iter().copied().collect();
         ui.horizontal(|ui| {
+            ui.menu_button("Add from preset", |ui| {
+                for pr in Preset::ALL {
+                    if ui.button(pr.label()).on_hover_text(pr.hint()).clicked() {
+                        ui.close();
+                        let mut new = 0;
+                        self.edit(|p| new = p.add_preset(pr, pr.default_name(), ""));
+                        if new != 0 {
+                            self.inventory.select_only(new);
+                        }
+                    }
+                }
+            });
             ui.menu_button("Add device", |ui| {
                 for k in DeviceKind::ALL {
                     if ui.button(k.label()).clicked() {
@@ -281,7 +297,8 @@ impl App {
             [id] => {
                 if let Some(d) = profile.device(*id) {
                     let mut d = d.clone();
-                    device_form(ui, &mut d, profile);
+                    let nics = self.nics();
+                    device_form(ui, &mut d, profile, &nics);
                     if profile.device(*id) != Some(&d) {
                         self.edit(|p| {
                             if let Some(x) = p.device_mut(d.id) {
@@ -300,10 +317,11 @@ impl App {
     fn check_list(&mut self, ui: &mut egui::Ui, id: Id, profile: &Profile) {
         let Some(d) = profile.device(id) else { return };
         ui.label(RichText::new("CHECKS").small().color(theme::MUTED));
+        let nics = self.nics();
         let mut remove = None;
         for c in &d.checks {
             let mut c2 = c.clone();
-            let gone = check_form(ui, &mut c2);
+            let gone = check_form(ui, &mut c2, &nics);
             if gone {
                 remove = Some(c.id);
             } else if c2 != *c {
@@ -324,20 +342,18 @@ impl App {
                 }
             });
         }
-        ui.horizontal(|ui| {
-            if ui.button("+ Ping").clicked() {
-                self.edit(|p| {
-                    p.add_check(id, CheckKind::Ping);
-                });
-            }
-            if ui
-                .button("+ TCP port")
-                .on_hover_text("Opens a connection and closes it again at once; nothing is sent")
-                .clicked()
-            {
-                self.edit(|p| {
-                    p.add_check(id, CheckKind::Tcp { port: 80 });
-                });
+        ui.menu_button("Add check", |ui| {
+            for k in CheckKind::templates() {
+                if ui
+                    .button(k.kind_label())
+                    .on_hover_text(check_hint(&k))
+                    .clicked()
+                {
+                    ui.close();
+                    self.edit(|p| {
+                        p.add_check(id, k.clone());
+                    });
+                }
             }
         });
     }
@@ -426,7 +442,7 @@ impl App {
 }
 
 /// The fields of one device.
-fn device_form(ui: &mut egui::Ui, d: &mut Device, profile: &Profile) {
+fn device_form(ui: &mut egui::Ui, d: &mut Device, profile: &Profile, nics: &[Nic]) {
     ui.label(
         RichText::new(if d.name.is_empty() { "Device" } else { &d.name })
             .size(17.0)
@@ -476,12 +492,8 @@ fn device_form(ui: &mut egui::Ui, d: &mut Device, profile: &Profile) {
             ui.add(egui::TextEdit::singleline(&mut d.mac).hint_text("optional").desired_width(240.0));
             ui.end_row();
             ui.label(RichText::new("Interface").color(theme::MUTED));
-            ui.add(
-                egui::TextEdit::singleline(&mut d.interface)
-                    .hint_text("the system's choice")
-                    .desired_width(240.0),
-            )
-            .on_hover_text("Network interface to check from (e.g. en1). Used from phase 4 on.");
+            interface_choice(ui, ("iface", d.id), &mut d.interface, nics, "The system's choice")
+                .on_hover_text("Network interface to check from. If it is down, the checks say so instead of turning red.");
             ui.end_row();
             ui.label(RichText::new("Criticality").color(theme::MUTED));
             ui.horizontal(|ui| {
@@ -509,8 +521,54 @@ fn device_form(ui: &mut egui::Ui, d: &mut Device, profile: &Profile) {
         });
 }
 
+/// Pick an interface of this computer (or none); one that is gone stays listed.
+fn interface_choice(
+    ui: &mut egui::Ui,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &mut String,
+    nics: &[Nic],
+    none: &str,
+) -> egui::Response {
+    let shown = if value.is_empty() {
+        none.to_string()
+    } else {
+        match nics.iter().find(|n| n.name == *value) {
+            Some(n) => n.label(),
+            None => format!("{value} (not found)"),
+        }
+    };
+    egui::ComboBox::from_id_salt(salt)
+        .selected_text(shown)
+        .width(240.0)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(value, String::new(), none);
+            for n in nics.iter().filter(|n| n.up) {
+                ui.selectable_value(value, n.name.clone(), n.label());
+            }
+        })
+        .response
+}
+
+/// What a kind of check does, for the hover text.
+fn check_hint(k: &CheckKind) -> &'static str {
+    match k {
+        CheckKind::Ping => "ICMP echo: reachable, latency, jitter, loss",
+        CheckKind::Tcp { .. } => "Opens a connection and closes it again at once; nothing is sent",
+        CheckKind::Console { .. } => {
+            "Asks the desk who it is (X32/M32, X Air, Wing); changes nothing"
+        }
+        CheckKind::ArtNetNode => "The node answers ArtPoll",
+        CheckKind::ArtNetUniverse { .. } => {
+            "DMX frames of a universe arrive, fast enough, from one sender"
+        }
+        CheckKind::Mdns { .. } => "The device announces a service (Dante: _netaudio-arc._udp)",
+        CheckKind::Ndi { .. } => "The NDI source is announced and its port accepts connections",
+        CheckKind::Interface { .. } => "A network interface of this computer is up",
+    }
+}
+
 /// One check's settings; true if it should be removed.
-fn check_form(ui: &mut egui::Ui, c: &mut Check) -> bool {
+fn check_form(ui: &mut egui::Ui, c: &mut Check, nics: &[Nic]) -> bool {
     let mut remove = false;
     egui::Frame::new()
         .fill(theme::CARD)
@@ -520,14 +578,22 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check) -> bool {
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
+                ui.label(RichText::new(c.kind.kind_label()).strong())
+                    .on_hover_text(check_hint(&c.kind));
                 match &mut c.kind {
-                    CheckKind::Ping => {
-                        ui.label(RichText::new("Ping").strong());
-                    }
                     CheckKind::Tcp { port } => {
-                        ui.label(RichText::new("TCP port").strong());
                         ui.add(egui::DragValue::new(port).range(1..=65535));
                     }
+                    CheckKind::Console { model } => {
+                        egui::ComboBox::from_id_salt(("console", c.id))
+                            .selected_text(model.label())
+                            .show_ui(ui, |ui| {
+                                for m in ConsoleModel::ALL {
+                                    ui.selectable_value(model, m, m.label());
+                                }
+                            });
+                    }
+                    _ => {}
                 }
                 ui.checkbox(&mut c.enabled, "on");
                 ui.checkbox(&mut c.critical, "critical")
@@ -538,6 +604,38 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check) -> bool {
                     }
                 });
             });
+            match &mut c.kind {
+                CheckKind::ArtNetUniverse { universe, min_fps } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("universe").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(universe).range(0..=32767));
+                        ui.label(RichText::new(pulse_core::artnet::universe_label(*universe)).small().color(theme::MUTED));
+                        ui.label(RichText::new("at least").color(theme::MUTED));
+                        ui.add(egui::DragValue::new(min_fps).range(1.0..=44.0).speed(0.5).suffix(" fps"));
+                    });
+                }
+                CheckKind::Mdns { service, instance } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("service").color(theme::MUTED));
+                        ui.add(egui::TextEdit::singleline(service).desired_width(150.0).font(egui::TextStyle::Monospace));
+                        ui.label(RichText::new("name").color(theme::MUTED));
+                        ui.add(egui::TextEdit::singleline(instance).hint_text("any at this address").desired_width(140.0));
+                    });
+                }
+                CheckKind::Ndi { source } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("source").color(theme::MUTED));
+                        ui.add(egui::TextEdit::singleline(source).hint_text("any at this address, or MACHINE (Name)").desired_width(260.0));
+                    });
+                }
+                CheckKind::Interface { name } => {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("interface").color(theme::MUTED));
+                        interface_choice(ui, ("check_iface", c.id), name, nics, "The device's interface");
+                    });
+                }
+                _ => {}
+            }
             ui.horizontal(|ui| {
                 ui.label(RichText::new("every").color(theme::MUTED));
                 let mut i = c.interval();
@@ -556,6 +654,7 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check) -> bool {
                     c.timeout_ms = Some(t);
                 }
             });
+            if matches!(c.kind, CheckKind::Ping | CheckKind::Tcp { .. }) {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("yellow over").color(theme::MUTED));
                 ui.add(egui::DragValue::new(&mut c.thresholds.latency_ms).range(0.1..=5000.0).speed(0.5).suffix(" ms"))
@@ -565,6 +664,7 @@ fn check_form(ui: &mut egui::Ui, c: &mut Check) -> bool {
                     ui.add(egui::DragValue::new(&mut c.thresholds.loss_pct).range(0.0..=100.0).speed(0.5).suffix(" % loss"));
                 }
             });
+            }
         });
     ui.add_space(4.0);
     remove

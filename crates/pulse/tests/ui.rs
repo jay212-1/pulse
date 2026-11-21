@@ -26,6 +26,7 @@ fn harness() -> Harness<'static, App> {
     config();
     let mut app = App::new(&egui::Context::default(), None);
     app.dialogs = false;
+    app.lan = false;
     // New profiles go to a folder of their own (never the real Documents).
     app.start.location = tempfile::tempdir().unwrap().keep();
     let mut b = Harness::builder().with_size(egui::vec2(1400.0, 860.0));
@@ -222,7 +223,9 @@ fn inventory_bulk_changes_and_delete_with_confirmation() {
     h.get_by_label("FOH desk").click();
     settle(&mut h);
     shot(&mut h, "inventory-edit");
-    h.get_by_label("+ TCP port").click();
+    h.get_by_label("Add check").click();
+    settle(&mut h);
+    h.get_by_label("TCP port").click();
     settle(&mut h);
     let d = h.state().profile().unwrap().devices[0].clone();
     assert_eq!(d.checks.len(), 2);
@@ -257,4 +260,92 @@ fn event_log_lists_changes_and_exports_csv() {
     let out = tempfile::tempdir().unwrap().keep().join("events.csv");
     assert!(h.state_mut().export_log(&out));
     assert_eq!(std::fs::read_to_string(&out).unwrap(), csv);
+}
+
+#[test]
+fn presets_bring_their_checks_and_new_check_kinds_can_be_edited() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    h.get_by_label_contains("Inventory").click();
+    settle(&mut h);
+    h.get_by_label("Add from preset").click();
+    settle(&mut h);
+    h.get_by_label("Behringer X32 / Midas M32").click();
+    settle(&mut h);
+    let p = h.state().profile().unwrap();
+    let d = p.devices.last().unwrap();
+    assert_eq!(d.kind, pulse_core::DeviceKind::Console);
+    assert_eq!(
+        d.checks[1].kind,
+        pulse_core::CheckKind::Console {
+            model: pulse_core::ConsoleModel::X32
+        }
+    );
+    h.get_by_label("Console query");
+    h.get_by_label("Add check").click();
+    settle(&mut h);
+    h.get_by_label("Art-Net universe").click();
+    settle(&mut h);
+    let d = h.state().profile().unwrap().devices.last().unwrap().clone();
+    assert!(matches!(
+        d.checks[2].kind,
+        pulse_core::CheckKind::ArtNetUniverse { universe: 0, .. }
+    ));
+    h.get_by_label_contains("0 (0:0:0)");
+    shot(&mut h, "inventory-preset");
+}
+
+#[test]
+fn discovery_lists_new_known_and_missing_devices_and_adds_with_one_click() {
+    let mut h = harness();
+    h.get_by_label("Try the demo").click();
+    settle(&mut h);
+    // An X32 nobody entered, and an Art-Net node at the demo's address.
+    let now = pulse_net::monitor::now_ms();
+    h.state().monitor.as_ref().unwrap().inject(|f| {
+        let ip = std::net::Ipv4Addr::new(192, 0, 2, 99);
+        f.consoles.insert(
+            (ip, pulse_core::ConsoleModel::X32),
+            pulse_net::found::ConsoleAnswer {
+                model: pulse_core::ConsoleModel::X32,
+                ip,
+                name: "Monitor X32".into(),
+                detail: "X32 · firmware 4.06".into(),
+                at: now,
+            },
+        );
+        f.artnet.nodes.insert(
+            std::net::Ipv4Addr::LOCALHOST,
+            (
+                pulse_core::artnet::PollReply {
+                    ip: std::net::Ipv4Addr::LOCALHOST,
+                    short_name: "Node DS".into(),
+                    ..Default::default()
+                },
+                now,
+            ),
+        );
+    });
+    settle(&mut h);
+    h.get_by_label("Discovery  (1 new)").click();
+    settle(&mut h);
+    assert_eq!(h.state().page, Page::Discovery);
+    h.get_by_label("Monitor X32");
+    h.get_by_label("NEW (1)");
+    h.get_by_label("IN THE INVENTORY (1)");
+    h.get_by_label("Scan subnet…");
+    shot(&mut h, "discovery");
+    h.get_by_label("Add").click();
+    settle(&mut h);
+    let p = h.state().profile().unwrap();
+    let d = p.devices.last().unwrap();
+    assert_eq!(d.name, "Monitor X32");
+    assert_eq!(d.address, "192.0.2.99");
+    assert_eq!(d.checks.len(), 2);
+    h.get_by_label("NEW (0)");
+    h.get_by_role_and_label(egui::accesskit::Role::Tab, "Discovery");
+    // The new desk is expected to answer its query: it is listed as not seen
+    // once its answer is older than a minute.
+    h.get_by_label_contains("EXPECTED, NOT SEEN");
 }

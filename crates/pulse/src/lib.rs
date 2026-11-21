@@ -4,6 +4,7 @@
 
 pub mod app;
 mod app_detail;
+pub mod app_discovery;
 pub mod app_inventory;
 mod app_log;
 pub mod app_monitor;

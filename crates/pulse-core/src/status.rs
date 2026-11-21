@@ -241,6 +241,10 @@ impl Engine {
         self.devices.get(&id)
     }
 
+    pub fn devices(&self) -> impl Iterator<Item = (&Id, &DeviceState)> {
+        self.devices.iter()
+    }
+
     /// Follow the inventory: new devices and checks start unknown, removed
     /// ones go, disabled ones turn grey.
     pub fn sync(&mut self, p: &Profile, now: Ms) -> Vec<Event> {
