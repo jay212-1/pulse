@@ -496,13 +496,15 @@ impl App {
             self.close_profile();
             self.start.form = true;
         }
-        let dropped: Vec<PathBuf> = ctx.input(|i| {
+        // Files dropped on the window or handed over by the system.
+        let mut dropped = crate::open_files::take();
+        dropped.extend(ctx.input(|i| {
             i.raw
                 .dropped_files
                 .iter()
                 .map(|f| f.path().to_path_buf())
-                .collect()
-        });
+                .collect::<Vec<_>>()
+        }));
         if let Some(p) = dropped.into_iter().find(|p| {
             p.extension()
                 .is_some_and(|e| e == pulse_core::profile::EXTENSION)

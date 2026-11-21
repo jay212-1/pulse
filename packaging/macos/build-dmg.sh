@@ -1,7 +1,7 @@
 #!/bin/bash
-# Builds dist/Pulse-x.y.z.dmg on a Mac, for this Mac's architecture
-# (one compile). UNIVERSAL=1 builds Apple Silicon + Intel. The DMG is only
-# made again when the program changed. The list of what belongs to this
+# Builds dist/Pulse-x.y.z.dmg and dist/pulse-agent-x.y.z-macos.zip on a Mac,
+# for this Mac's architecture (one compile). UNIVERSAL=1 builds Apple Silicon
+# + Intel. Packages are only made again when the program changed. The list of what belongs to this
 # build: dist/files-mac.txt.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -18,6 +18,7 @@ if [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = "1" ]; then HOST=a
 ARCHS="${ARCHS:-$HOST}"
 [ -n "${UNIVERSAL:-}" ] && ARCHS="arm64 x86_64"
 BINS=()
+AGENTS=()
 for a in $ARCHS; do
   case "$a" in
     arm64|aarch64) a=arm64; t=aarch64-apple-darwin ;;
@@ -26,10 +27,12 @@ for a in $ARCHS; do
   if [ "$a" = "$HOST" ] && [ "$(uname -m)" = "$HOST" ]; then
     ui_run "Programm für diesen Mac ($a)" cargo build --release --locked
     BINS+=("target/release/pulse")
+    AGENTS+=("target/release/pulse-agent")
   else
     rustup target list --installed 2>/dev/null | grep -qx "$t" || ui_run "Rust-Ziel $t (einmalig)" rustup target add "$t"
     ui_run "Programm für $a" cargo build --release --locked --target "$t"
     BINS+=("target/$t/release/pulse")
+    AGENTS+=("target/$t/release/pulse-agent")
   fi
 done
 
@@ -58,5 +61,23 @@ make_dmg() {
 if ui_fresh "$DMG" "$KEY"; then ui_skip "App und DMG" "unverändert"; else
   ui_run "App und DMG" make_dmg && ui_made "$DMG" "$KEY"
 fi
-{ echo "$V"; echo "$DMG"; } > dist/files-mac.txt
+
+# The agent for show computers: a plain program in a zip, signed ad hoc.
+ZIP="dist/pulse-agent-$V-macos.zip"
+AKEY="$V-$(ui_fingerprint "${AGENTS[@]}" packaging/agent/README.txt)"
+make_agent_zip() {
+  WORK=$(mktemp -d)
+  mkdir -p "$WORK/pulse-agent"
+  lipo -create -output "$WORK/pulse-agent/pulse-agent" "${AGENTS[@]}"
+  codesign --force -s - "$WORK/pulse-agent/pulse-agent"
+  cp packaging/agent/README.txt "$WORK/pulse-agent/"
+  rm -f "$ZIP"
+  (cd "$WORK" && ditto -c -k --norsrc --noextattr --keepParent pulse-agent agent.zip)
+  mv "$WORK/agent.zip" "$ZIP"
+  rm -rf "$WORK"
+}
+if ui_fresh "$ZIP" "$AKEY"; then ui_skip "Agent-Zip" "unverändert"; else
+  ui_run "Agent-Zip" make_agent_zip && ui_made "$ZIP" "$AKEY"
+fi
+{ echo "$V"; echo "$DMG"; echo "$ZIP"; } > dist/files-mac.txt
 ui_done

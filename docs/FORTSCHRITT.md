@@ -9,7 +9,7 @@
 | 5 Modi | fertig (2026-11-21, 0.4.0): CHECK/SHOW/DIAGNOSE, Pre-Show-Check mit Freigabe und HTML/CSV-Bericht, Show-Modus (ruhig, Blinken, Ton optional), Ampelfenster, Diagnose mit Graphen, Hinweisen, Port-Test und Traceroute. Tests: 44 Kern, 21 Netz, 10 UI |
 | 6 Simulator | fertig (2026-11-21, 0.5.0): `pulse-sim` als Bibliothek und Programm, Demo läuft auf dem Simulator mit Szenario, 4 Integrationstests gegen den Simulator, Netzlast mit 100 Geräten gemessen (`netzlast.md`: 2,9 kB/s, Limit greift ab etwa 85 Geräten). Tests: 44 Kern, 21 Netz, 4 Simulator, 10 UI |
 | 7 Erweiterungen | fertig (2026-11-21, 0.6.0): Statusseite (TCP 7470, LAN, standardmäßig aus), Pulse Agent (`pulse-agent`, TCP 7471), sACN-Universen, SNMP-Switch-Ports, Blueprint-Import über die Austauschdatei (Blueprint 0.2.4), Presets für Soundcraft Si und grandMA3. Tests: 59 Kern, 24 Netz, 6 Simulator, 3 Agent, 12 UI |
-| 8 Build/Release | offen |
+| 8 Build/Release | fertig bis auf das Release (2026-11-21, 0.7.0): Windows-Installer, Linux-Archiv, Agent-Pakete für alle drei Systeme, `release.sh` (Probelauf auf dem Mac), `install.sh`, `.pulse`-Doppelklick, README, Anleitung. Tests: 59 Kern, 24 Netz, 6 Simulator, 3 Agent, 14 App (davon 12 UI). Das erste Release wartet auf deine Freigabe |
 
 ## Offen aus Phase 2
 
@@ -18,9 +18,7 @@
 
 ## Offen aus Phase 3
 
-- Launcher-Kachel: Diff liegt in `showtime-suite` bereit, wird nach Freigabe committet. Das Icon kommt mit dem ersten Release ins Launcher-Release-Repo (`icons/pulse.png`), wie bei Blueprint.
-- `install.sh` (Linux), Windows-Installer und `release.sh` kommen in Phase 8.
-- Doppelklick auf eine `.pulse`-Datei im Finder öffnet sie noch nicht (Dateizuordnung später). Öffnen per Menü und Drag & Drop geht.
+- Launcher-Kachel: in `showtime-suite` 0.3.3 committet. Das Icon kommt mit dem ersten Release ins Launcher-Release-Repo (`icons/pulse.png`), wie bei Blueprint.
 
 ## Offen aus Phase 4
 
@@ -42,5 +40,11 @@
 
 - Soundcraft Si Impact und grandMA3 nur mit Presets, nicht gegen echte Geräte getestet. Beim Si bitte prüfen, ob TCP 3804 antwortet (Diagnose › Port-Test); bei der MA3 das Universum im Inventar auf das stellen, was die Konsole sendet. Art-Net, das die MA3 per Unicast an Nodes schickt, sieht Pulse nicht (nur Broadcast oder an diesen Rechner).
 - SNMP und sACN nur gegen den Simulator getestet. Echte Switches: Community und erlaubte Absender prüfen.
-- `pulse-agent` gibt es noch nicht als Download; Packaging kommt in Phase 8. Auf Windows ist er noch nicht gebaut.
 - Die Statusseite einmal vom Handy im echten Netz öffnen (Firewall von macOS fragt beim ersten Mal).
+
+## Offen aus Phase 8
+
+- Erstes Release nach `jay212-1/pulse-releases`: erst nach deiner Freigabe. Dann auf dem Mac `./release.sh`, auf dem Arch-PC `./release.sh` (Linux, Windows, zwei Agent-Pakete).
+- Windows ist noch nie gebaut worden (`icmp_windows.rs`, Installer, Agent): das passiert beim ersten `./release.sh` auf dem Arch-PC. Danach den Installer einmal auf einem Windows-Rechner ausprobieren.
+- Mit dem Release: `icons/pulse.png` ins Launcher-Release-Repo und den Katalog dort aktualisieren (die Kachel ist in `showtime-suite` 0.3.3 schon drin).
+- Doppelklick auf eine `.pulse`-Datei einmal im Finder ausprobieren (nach `bash install-mac.sh`).

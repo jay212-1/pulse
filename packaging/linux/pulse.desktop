@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pulse
+Comment=Network and device monitor for live shows
+Exec=pulse %f
+Icon=pulse
+Terminal=false
+Categories=Network;AudioVideo;

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.7.0
+
+- Packaging (phase 8): Windows installer (`Pulse-Setup-<v>.exe`, Inno Setup, no admin rights, into
+  `Showtime Suite\Pulse`), Linux archive (`pulse-<v>-linux-x86_64.tar.gz`, with menu entry and
+  icon), `install.sh` for Linux from the source, and `packaging/build-on-linux.sh`, which builds
+  Linux and Windows on one Linux PC.
+- Pulse Agent as a download: `pulse-agent-<v>-macos.zip`, `pulse-agent-<v>-windows-x86_64.zip` and
+  `pulse-agent-<v>-x86_64-linux.tar.gz`, each with a readme (start, firewall, start at login).
+  `pulse-agent --version`.
+- `release.sh` as in the other suite apps: builds what this computer can build and uploads it to
+  `jay212-1/pulse-releases`; `status` shows what is online, `dry-run` builds and uploads nothing.
+- `.pulse` files open with a double-click: on the Mac through the "open documents" event (as in
+  Show Master and Blueprint), on Windows through the installer's file association.
+- README in English, user guide in German (`docs/ANLEITUNG.md`): profiles, presets including
+  Soundcraft Si and grandMA3, the agent, the modes, the status page, what to do when something is
+  red.
+
 ## 0.6.0
 
 - Status page (phase 7): Pulse's traffic light for phones and other computers of the crew, read-only,

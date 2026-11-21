@@ -131,8 +131,12 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             },
+            "-V" | "--version" => {
+                println!("pulse-agent {}", env!("CARGO_PKG_VERSION"));
+                return ExitCode::SUCCESS;
+            }
             "-h" | "--help" => {
-                println!("pulse-agent [--port 7471] [--bind 0.0.0.0]");
+                println!("pulse-agent [--port 7471] [--bind 0.0.0.0] [--version]");
                 println!("Answers Pulse's questions about this computer (read-only): CPU, memory, disk, running programs.");
                 return ExitCode::SUCCESS;
             }

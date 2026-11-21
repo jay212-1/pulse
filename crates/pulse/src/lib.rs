@@ -12,6 +12,7 @@ pub mod app_monitor;
 pub mod app_preshow;
 pub mod app_show;
 pub mod app_start;
+mod open_files;
 mod platform;
 pub mod settings;
 pub mod theme;
@@ -45,6 +46,8 @@ impl eframe::App for Window {
 
 /// Open the window and run until it is closed. Main thread only.
 pub fn run(open: Option<PathBuf>) -> eframe::Result {
+    // Early, so a document that launched the app is caught (macOS).
+    open_files::install();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Pulse")
         .with_app_id("pulse")
@@ -60,6 +63,10 @@ pub fn run(open: Option<PathBuf>) -> eframe::Result {
             viewport,
             ..Default::default()
         },
-        Box::new(|cc| Ok(Box::new(Window(App::new(&cc.egui_ctx, open))))),
+        Box::new(|cc| {
+            open_files::install();
+            open_files::set_repaint_context(&cc.egui_ctx);
+            Ok(Box::new(Window(App::new(&cc.egui_ctx, open))))
+        }),
     )
 }

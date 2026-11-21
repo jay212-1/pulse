@@ -51,8 +51,8 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   `presets.rs` (device presets), `discovery.rs` (sightings -> new / known / missing devices),
   `report.rs` (pre-show report, HTML and CSV), `hints.rs` (plain-language diagnosis hints).
 - `crates/pulse-net` – the network side, read-only: `icmp.rs` (ping without admin rights:
-  ICMP datagram sockets on macOS/Linux, `icmp_windows.rs` with `IcmpSendEcho` – the only
-  `unsafe` code –, TCP fallback), `probe.rs` (the `Probe` trait and the probes), `monitor.rs`
+  ICMP datagram sockets on macOS/Linux, `icmp_windows.rs` with `IcmpSendEcho` – `unsafe`, like
+  `pulse/open_files_macos.rs` –, TCP fallback), `probe.rs` (the `Probe` trait and the probes), `monitor.rs`
   (scheduler on its own tokio runtime: spread-out intervals, packet limit, hard timeout per run,
   shared snapshot for the window, starts the listeners only when needed), `found.rs` (what the
   listeners found), `artnet.rs` (listener on UDP 6454), `mdns.rs` (mDNS registry, `mdns-sd`),
@@ -64,7 +64,8 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   `app_log.rs` (event log, CSV), `app_discovery.rs` (auto discovery), `app_preshow.rs`
   (pre-show check, sign-off, report), `app_show.rs` (show mode, light window, alert sound),
   `app_diagnose.rs` (graphs, hints, tools), `platform.rs` (open a file, alert sound), `theme.rs` (suite colours, drawn status symbols),
-  `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings).
+  `settings.rs` (`PULSE_CONFIG_DIR` redirects them; tests never touch the real settings),
+  `open_files.rs` (+ `open_files_macos.rs`: files the system hands over, copied from Blueprint).
 - `pulse-core` also has `sacn.rs` (E1.31 parser, priorities), `snmp.rs` (v2c BER codec, how a
   switch port is judged), `agent.rs` (Pulse Agent's JSON and how it is judged) and `exchange.rs`
   (import from Blueprint's Showtime exchange file). `pulse-net` has `sacn.rs` (listener, multicast
@@ -76,7 +77,12 @@ Showtime Suite installs, updates and starts the others; its catalog is `showtime
   Art-Net node and sender, TCP services, announcements injected into Pulse's findings (never on
   the real network), faults and scenarios. `demo.rs` is the demo venue. `tests/sim.rs` has the
   integration tests and the ignored load measurement for `docs/netzlast.md`.
-- `install-mac.sh`, `packaging/macos/` – as in Blueprint.
+- `install-mac.sh`, `install.sh`, `release.sh`, `packaging/` (`macos/build-dmg.sh` also zips the
+  agent, `build-on-linux.sh` builds Linux and Windows with the agent, `windows/pulse.iss`,
+  `linux/pulse.desktop`, `agent/README.txt`) – as in Blueprint. The agent's package names must not
+  end like the app's (`.dmg`, `-linux-x86_64.tar.gz`, `Pulse-Setup-*.exe`): the launcher picks by
+  name ending.
+- `docs/ANLEITUNG.md` is the user guide (German); keep it in step with the UI.
 - `scripts/setup.sh` and `scripts/ui.sh` are identical copies of the files in the other suite
   apps – change all of them together.
 
@@ -91,6 +97,7 @@ cargo run -p pulse-net --example watch -- 127.0.0.1 192.0.2.1
 cargo run --release -p pulse-sim -- sim.pulse   # simulated devices + their profile
 cargo test --release -p pulse-sim --test sim -- --ignored --nocapture   # load measurement
 cargo run --release -p pulse-agent -- --port 7471   # the agent
+./release.sh dry-run   # builds this computer's packages, uploads nothing
 ```
 
 - Pulse never writes to devices: probes only ask (ping, TCP connect and close, protocol queries).
